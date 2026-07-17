@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Boxes, Package, BadgeCheck, Receipt, Gauge, Plug, Bell,
-  Settings as SettingsIcon, LogOut, Store as StoreIcon, ExternalLink,
+  Users2, Settings as SettingsIcon, LogOut, Store as StoreIcon, ExternalLink,
 } from 'lucide-react'
 import { api } from './api.js'
 import { trySsoLogin } from './sso.js'
@@ -14,16 +14,19 @@ import Subscriptions from './pages/Subscriptions.jsx'
 import Charges from './pages/Charges.jsx'
 import Meters from './pages/Meters.jsx'
 import Connections from './pages/Connections.jsx'
+import UsersPage from './pages/Users.jsx'
 import Notices from './pages/Notices.jsx'
 import Settings from './pages/Settings.jsx'
 import Store from './pages/Store.jsx'
 import StoreDetail from './pages/StoreDetail.jsx'
+import UserPortal from './pages/UserPortal.jsx'
 
 const NAV = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', end: true },
   { to: '/apps', icon: Boxes, label: 'Apps' },
   { to: '/planes', icon: Package, label: 'Planes' },
   { to: '/suscripciones', icon: BadgeCheck, label: 'Suscripciones' },
+  { to: '/usuarios', icon: Users2, label: 'Usuarios' },
   { to: '/cobros', icon: Receipt, label: 'Cobros' },
   { to: '/tarifas', icon: Gauge, label: 'Tarifas' },
   { to: '/conexiones', icon: Plug, label: 'Conexiones' },
@@ -46,23 +49,28 @@ export default function App() {
 }
 
 function AdminApp({ location }) {
-  const [auth, setAuth] = useState(null) // null = cargando, false = sin sesión, true = admin
+  const [me, setMe] = useState(null) // null = cargando · false = sin sesión · { role, email, name }
+
+  const loadMe = async () => {
+    try { return await api.get('/api/admin/me') } catch { return null }
+  }
 
   useEffect(() => {
     let alive = true
     ;(async () => {
-      try {
-        await api.get('/api/admin/me')
-        if (alive) setAuth(true)
-        return
-      } catch { /* sin sesión: probamos SSO */ }
-      const ssoOk = await trySsoLogin()
-      if (alive) setAuth(ssoOk)
+      let m = await loadMe()
+      if (!m) { if (await trySsoLogin()) m = await loadMe() }
+      if (alive) setMe(m || false)
     })()
     return () => { alive = false }
   }, [])
 
-  if (auth === null) {
+  const logout = async () => {
+    await api.post('/api/admin/logout').catch(() => {})
+    setMe(false)
+  }
+
+  if (me === null) {
     return (
       <div className="min-h-screen grid place-items-center relative">
         <div className="app-bg" aria-hidden="true" />
@@ -73,12 +81,8 @@ function AdminApp({ location }) {
       </div>
     )
   }
-  if (!auth) return <Login onLogin={() => setAuth(true)} />
-
-  const logout = async () => {
-    await api.post('/api/admin/logout').catch(() => {})
-    setAuth(false)
-  }
+  if (!me) return <Login onLogin={async () => setMe((await loadMe()) || false)} />
+  if (me.role === 'user') return <UserPortal me={me} onLogout={logout} />
 
   return (
     <div className="min-h-screen relative">
@@ -134,6 +138,7 @@ function AdminApp({ location }) {
               <Route path="/apps" element={<Apps />} />
               <Route path="/planes" element={<Plans />} />
               <Route path="/suscripciones" element={<Subscriptions />} />
+              <Route path="/usuarios" element={<UsersPage />} />
               <Route path="/cobros" element={<Charges />} />
               <Route path="/tarifas" element={<Meters />} />
               <Route path="/conexiones" element={<Connections />} />

@@ -53,14 +53,20 @@ export default function StoreDetail() {
               {/* ficha */}
               <div className="lg:col-span-2 space-y-4">
                 <div>
-                  <h1 className="text-2xl font-bold text-gradient-gold">{data.app.name}</h1>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h1 className="text-2xl font-bold text-gradient-gold">{data.app.name}</h1>
+                    {data.app.badge === 'new' && <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-gold text-bg">Nuevo</span>}
+                    {data.app.badge === 'coming_soon' && <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border border-gold/40 text-gold">Próximamente</span>}
+                  </div>
                   {data.app.tagline && <p className="text-ink2 mt-1">{data.app.tagline}</p>}
                 </div>
                 <Stars value={data.app.rating || 0} count={data.app.reviews_count} size={18} />
                 {data.app.price_text && (
                   <div className="text-lg font-semibold text-gold">{data.app.price_text}</div>
                 )}
-                {data.app.install_url ? (
+                {data.app.badge === 'coming_soon' ? (
+                  <div className="w-full text-center px-4 py-3 rounded-xl border border-gold/40 text-gold font-semibold">Próximamente</div>
+                ) : data.app.install_url ? (
                   <a
                     href={data.app.install_url}
                     target="_blank"

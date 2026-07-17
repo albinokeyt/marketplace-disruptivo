@@ -17,6 +17,7 @@ const publicApp = (a) => ({
   description: a.description,
   install_url: a.install_url,
   price_text: a.price_text,
+  badge: a.badge || null, // 'new' | 'coming_soon' | null
   media: a.media || [],
   features: a.features || [],
   rating: a.rating ? Number(Number(a.rating).toFixed(1)) : null,
@@ -67,6 +68,9 @@ export default async function marketplaceRoutes(app) {
     if (!cur) return reply.code(404).send({ error: 'App no encontrada' })
     const media = Array.isArray(b.media) ? b.media.slice(0, 12) : undefined
     const features = Array.isArray(b.features) ? b.features.slice(0, 20).map(String) : undefined
+    // badge: '' o null lo borra; solo 'new'/'coming_soon' válidos
+    let badge; let setBadge = false
+    if ('badge' in b) { setBadge = true; badge = ['new', 'coming_soon'].includes(b.badge) ? b.badge : null }
     const { rows: [row] } = await q(
       `UPDATE apps SET
          slug = COALESCE($1, slug),
@@ -76,7 +80,8 @@ export default async function marketplaceRoutes(app) {
          price_text = COALESCE($5, price_text),
          media = COALESCE($6::jsonb, media),
          features = COALESCE($7::jsonb, features),
-         visible = COALESCE($8, visible)
+         visible = COALESCE($8, visible),
+         badge = CASE WHEN $10 THEN $11 ELSE badge END
        WHERE id=$9 RETURNING *`,
       [
         b.slug ? slugify(b.slug, id) : (cur.slug || slugify(cur.name, id)),
@@ -84,6 +89,7 @@ export default async function marketplaceRoutes(app) {
         media ? JSON.stringify(media) : null,
         features ? JSON.stringify(features) : null,
         typeof b.visible === 'boolean' ? b.visible : null, id,
+        setBadge, badge ?? null,
       ]
     )
     return { app: { ...row, key_hash: undefined } }

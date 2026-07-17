@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import crypto from 'node:crypto'
-import { generateApiKey, hashKey, safeEqual } from '../src/lib/crypto.js'
+import { generateApiKey, hashKey, safeEqual, hashPassword, verifyPassword } from '../src/lib/crypto.js'
 import { numOr } from '../src/db.js'
 import { buildAuthUrl } from '../src/lib/ghl.js'
 import { decryptGhlSso, ssoAuthorized } from '../src/lib/sso.js'
@@ -60,6 +60,17 @@ test('buildAuthUrl incluye scopes y el state cuando se pasa', () => {
   // sin state no aparece el parámetro
   const url2 = new URL(buildAuthUrl(cfg, 'https://x.test/cb'))
   assert.equal(url2.searchParams.get('state'), null)
+})
+
+test('hashPassword/verifyPassword: sal por usuario, verifica y rechaza', () => {
+  const h = hashPassword('miClave123')
+  assert.match(h, /^scrypt\$[0-9a-f]{32}\$[0-9a-f]{64}$/)
+  assert.equal(verifyPassword('miClave123', h), true)
+  assert.equal(verifyPassword('otra', h), false)
+  // dos hashes de la misma contraseña difieren (sal distinta)
+  assert.notEqual(hashPassword('x'), hashPassword('x'))
+  // entrada corrupta no lanza
+  assert.equal(verifyPassword('x', 'basura'), false)
 })
 
 test('decryptGhlSso descifra el formato de GHL y rechaza el secreto incorrecto', () => {

@@ -18,8 +18,10 @@ function AppCard({ a }) {
       to={`/tienda/${a.slug}`}
       className="group bg-card border border-border rounded-2xl overflow-hidden lift flex flex-col"
     >
-      <div className="aspect-video bg-card2 overflow-hidden">
+      <div className="aspect-video bg-card2 overflow-hidden relative">
         <Thumb item={a.media?.[0]} className="group-hover:scale-105 transition-transform duration-500" />
+        {a.badge === 'new' && <span className="absolute top-2 left-2 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-gold text-bg">Nuevo</span>}
+        {a.badge === 'coming_soon' && <span className="absolute top-2 left-2 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-card2 border border-gold/40 text-gold">Próximamente</span>}
       </div>
       <div className="p-4 flex flex-col gap-2 flex-1">
         <div className="flex items-start justify-between gap-2">

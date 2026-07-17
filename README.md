@@ -14,11 +14,16 @@ El centro de apps del **Departamento Disruptivo**: **tienda pública** de tus ap
 **Cómo llega el dinero:** GHL descuenta del wallet del cliente y liquida al developer vía **Tipalti el día 15 de cada mes** (comisión 0% hasta el 31/12/2026). Esta app centraliza y contabiliza; GHL cobra y te paga.
 
 ## Módulos
-- **Tienda** (`/tienda`, pública): vitrina de apps con media, estrellas/reseñas, precio y botón «Instalar en GoHighLevel».
+- **Tienda** (`/tienda`, pública): vitrina de apps con media, estrellas/reseñas, precio, badges «Nuevo»/«Próximamente» y botón «Instalar en GoHighLevel».
 - **Wallet**: cobra del wallet de GHL por uso (meters), reconciliación, reembolsos. (ver «API para tus apps»)
 - **Accesos y suscripciones**: da acceso de una subcuenta a una app o plan, por meses o indefinido, de pago/prueba/cortesía. Tus apps preguntan con `GET /api/v1/access/<locationId>`.
 - **Planes**: bundles de apps con días de prueba y duración.
-- **Avisos**: comunicados internos y banners en la tienda.
+- **Usuarios y portal**: creas clientes con **login propio** (email+contraseña, aunque no estén en GHL), les asignas subcuentas, y cada uno entra a **su portal** donde ve **su** consumo (gasto por app, histórico), sus accesos activos y los avisos. Tú (admin) ves el de todos.
+- **Avisos**: comunicados internos, banners en la tienda y en el portal del cliente.
+
+## Roles y acceso
+- **Super-admin**: entra con `ADMIN_USER`/`ADMIN_PASS` (o SSO de GHL) → panel completo.
+- **Usuarios de tabla** (creados en el panel → Usuarios): entran con su email+contraseña. Rol `admin` (ve todo) o `user` (ve solo sus subcuentas, en el portal). Las sesiones se **revalidan contra la BD** en cada petición: degradar/desactivar/borrar a un usuario surte efecto al instante.
 
 ## Stack
 

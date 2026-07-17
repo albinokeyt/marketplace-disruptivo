@@ -1,9 +1,9 @@
 import { q, numOr } from '../db.js'
 import { config } from '../config.js'
 import { redis } from '../redis.js'
-import { safeEqual, generateApiKey } from '../lib/crypto.js'
+import { safeEqual, generateApiKey, verifyPassword } from '../lib/crypto.js'
 import { rateLimit } from '../lib/ratelimit.js'
-import { createSession, destroySession, requireAdmin } from '../lib/session.js'
+import { createSession, destroySession, requireAdmin, requireAuth } from '../lib/session.js'
 import { getSetting, setSetting, getGhlConfig } from '../lib/settings.js'
 import { refundCharge, reconcileCharge, publicCharge } from '../lib/charges.js'
 import { decryptGhlSso, ssoAuthorized } from '../lib/sso.js'
@@ -15,26 +15,37 @@ const LOGIN_WINDOW_S = 900
 export default async function adminRoutes(app) {
   // ---------- auth ----------
   app.post('/api/admin/login', async (req, reply) => {
-    const { user, pass } = req.body || {}
-    if (!config.adminPass) {
-      return reply.code(503).send({ error: 'Login deshabilitado: define ADMIN_PASS en las variables de entorno' })
-    }
+    const body = req.body || {}
+    const ident = String(body.email || body.user || '').trim().toLowerCase()
+    const pass = body.pass || ''
     // anti fuerza bruta por IP (trustProxy ya resuelve la IP real)
     const failKey = `login:fail:${req.ip}`
     const fails = numOr(await redis.get(failKey), 0)
     if (fails >= LOGIN_MAX_FAILS) {
       return reply.code(429).send({ error: 'Demasiados intentos fallidos: espera 15 minutos' })
     }
-    const okUser = safeEqual(user || '', config.adminUser)
-    const okPass = safeEqual(pass || '', config.adminPass)
-    if (!okUser || !okPass) {
+    const fail = async () => {
       const n = await redis.incr(failKey)
       if (n === 1) await redis.expire(failKey, LOGIN_WINDOW_S)
       return reply.code(401).send({ error: 'Credenciales incorrectas' })
     }
-    await redis.del(failKey)
-    await createSession(req, reply)
-    return { ok: true }
+
+    // 1) super-admin por variables de entorno
+    if (config.adminPass && safeEqual(ident, String(config.adminUser).toLowerCase()) && safeEqual(pass, config.adminPass)) {
+      await redis.del(failKey)
+      await createSession(req, reply, { userId: 'root', role: 'admin' })
+      return { ok: true, role: 'admin' }
+    }
+    // 2) usuario de la tabla users (creado por un admin, aunque no esté en GHL)
+    if (ident) {
+      const { rows: [u] } = await q('SELECT * FROM users WHERE email=$1 AND active=true', [ident])
+      if (u && verifyPassword(pass, u.password_hash)) {
+        await redis.del(failKey)
+        await createSession(req, reply, { userId: String(u.id), role: u.role })
+        return { ok: true, role: u.role }
+      }
+    }
+    return fail()
   })
 
   // Auto-login por SSO de GHL: la app, embebida en una Custom Page, recibe el contexto de usuario
@@ -59,7 +70,7 @@ export default async function adminRoutes(app) {
       return reply.code(403).send({ error: 'Tu usuario de GHL no está autorizado para este panel' })
     }
     // sesión cross-site: la cookie viaja en el iframe de GHL (SameSite=None; Secure; Partitioned)
-    await createSession(req, reply, { crossSite: true })
+    await createSession(req, reply, { userId: `sso:${String(identity.email || '').toLowerCase()}`, role: 'admin', crossSite: true })
     return { ok: true }
   })
 
@@ -68,7 +79,16 @@ export default async function adminRoutes(app) {
     return { ok: true }
   })
 
-  app.get('/api/admin/me', { preHandler: requireAdmin }, async () => ({ ok: true, user: config.adminUser }))
+  app.get('/api/admin/me', { preHandler: requireAuth }, async (req, reply) => {
+    const s = req.session
+    if (s.role === 'admin') {
+      const email = s.userId === 'root' ? config.adminUser : (String(s.userId).startsWith('sso:') ? String(s.userId).slice(4) : null)
+      return { ok: true, role: 'admin', email }
+    }
+    const { rows: [u] } = await q('SELECT email, name, role FROM users WHERE id=$1 AND active=true', [numOr(s.userId)])
+    if (!u) return reply.code(401).send({ error: 'No autorizado' })
+    return { ok: true, role: 'user', email: u.email, name: u.name }
+  })
 
   // todo lo demás requiere sesión admin
   const guard = { preHandler: requireAdmin }

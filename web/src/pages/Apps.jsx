@@ -6,7 +6,7 @@ import { Card, Button, Input, Select, Badge, Modal, Th, Td, Empty, Toggle } from
 function ListingModal({ app, onClose, onSaved }) {
   const [f, setF] = useState({
     tagline: app.tagline || '', price_text: app.price_text || '', install_url: app.install_url || '',
-    description: app.description || '', slug: app.slug || '',
+    description: app.description || '', slug: app.slug || '', badge: app.badge || '',
     media: Array.isArray(app.media) ? app.media : [], visible: Boolean(app.visible),
     featuresText: (Array.isArray(app.features) ? app.features : []).join('\n'),
   })
@@ -27,7 +27,7 @@ function ListingModal({ app, onClose, onSaved }) {
     try {
       await api.patch(`/api/admin/apps/${app.id}/listing`, {
         tagline: f.tagline, price_text: f.price_text, install_url: f.install_url, description: f.description,
-        slug: f.slug || undefined, visible: f.visible,
+        slug: f.slug || undefined, visible: f.visible, badge: f.badge || null,
         media: f.media.filter((m) => m.url?.trim()),
         features: f.featuresText.split('\n').map((x) => x.trim()).filter(Boolean),
       })
@@ -51,6 +51,11 @@ function ListingModal({ app, onClose, onSaved }) {
           <Input label="Precio (texto)" value={f.price_text} onChange={set('price_text')} placeholder="desde 0,015€/mensaje" />
           <Input label="Slug (URL)" value={f.slug} onChange={set('slug')} placeholder="hermes-setter" />
         </div>
+        <Select label="Etiqueta destacada" value={f.badge} onChange={set('badge')}>
+          <option value="">Ninguna</option>
+          <option value="new">Nuevo</option>
+          <option value="coming_soon">Próximamente</option>
+        </Select>
         <Input label="Link de instalación en GHL" value={f.install_url} onChange={set('install_url')} placeholder="https://marketplace.gohighlevel.com/..." />
         <label className="block">
           <span className="block text-xs text-ink2 mb-1.5">Descripción</span>

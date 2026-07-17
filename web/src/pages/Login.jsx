@@ -35,7 +35,7 @@ export default function Login({ onLogin }) {
           <p className="text-xs text-mut mt-1">Panel de administración</p>
         </div>
         <form onSubmit={submit} className="space-y-4">
-          <Input label="Usuario" value={user} onChange={(e) => setUser(e.target.value)} autoFocus />
+          <Input label="Usuario o email" value={user} onChange={(e) => setUser(e.target.value)} autoFocus />
           <Input label="Contraseña" type="password" value={pass} onChange={(e) => setPass(e.target.value)} />
           {error && <p className="text-bad text-xs">{error}</p>}
           <Button className="w-full" disabled={busy}>
