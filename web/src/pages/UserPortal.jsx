@@ -50,8 +50,19 @@ export default function UserPortal({ me, onLogout }) {
         )}
 
         <h1 className="text-xl font-bold mb-4">Mi consumo</h1>
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-          <Card className="lift"><div className="text-xs text-mut">Últimos 30 días</div><div className="text-2xl font-bold mt-1.5 tabular-nums text-gradient-gold">{usage ? <Money n={usage.totals.last30} /> : '…'}</div></Card>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <Card className="lift">
+            <div className="text-xs text-mut">Crédito disponible</div>
+            <div className="text-2xl font-bold mt-1.5 tabular-nums text-ok">{usage ? <Money n={usage.credit || 0} /> : '…'}</div>
+            <div className="text-[11px] text-ink2 mt-1">saldo por subcuenta; se consume antes que tu wallet</div>
+          </Card>
+          <Card className="lift">
+            <div className="text-xs text-mut">Últimos 30 días</div>
+            <div className="text-2xl font-bold mt-1.5 tabular-nums text-gradient-gold">{usage ? <Money n={usage.totals.last30} /> : '…'}</div>
+            {usage?.credit_used?.last30 > 0 && (
+              <div className="text-[11px] text-ok mt-1">{fmtUsd(usage.credit_used.last30)} cubierto con crédito</div>
+            )}
+          </Card>
           <Card className="lift"><div className="text-xs text-mut">Total histórico</div><div className="text-2xl font-bold mt-1.5 tabular-nums text-gradient-gold">{usage ? <Money n={usage.totals.all_time} /> : '…'}</div></Card>
           <Card className="lift"><div className="text-xs text-mut">Apps con acceso</div><div className="text-2xl font-bold mt-1.5 tabular-nums">{access ? access.length : '…'}</div></Card>
         </div>

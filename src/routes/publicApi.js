@@ -3,6 +3,7 @@ import { hashKey } from '../lib/crypto.js'
 import { rateLimit } from '../lib/ratelimit.js'
 import { resolveChargeInput, executeCharge, reconcileCharge, refundCharge, publicCharge } from '../lib/charges.js'
 import { checkAccess } from '../lib/access.js'
+import { trySpendCredit, getBalance } from '../lib/credits.js'
 import * as ghl from '../lib/ghl.js'
 
 const RATE_PER_MIN = numOr(process.env.API_RATE_PER_MIN, 600) ?? 600
@@ -105,6 +106,22 @@ export default async function publicApiRoutes(app) {
       return reply.code(201).send({ test_mode: true, charge: publicCharge(row, input.meter) })
     }
 
+    // 1º el crédito interno (si cubre el importe completo); si no alcanza, al wallet de GHL.
+    // SOLO para cargos NUEVOS: un reintento (fila reclamada de failed/unknown) debe pasar por GHL,
+    // que dedupe por eventId y detecta si el intento anterior ya cobró — esa red de seguridad no se toca.
+    if (inserted) {
+      const credit = await trySpendCredit(row.id, input.conn.location_id, input.amount)
+      if (credit.ok) {
+        return reply.code(201).send({ test_mode: false, charge: publicCharge(credit.row, input.meter) })
+      }
+      if (credit.reason === 'not_pending') {
+        // otro proceso ya resolvió este cargo: devolver su estado, JAMÁS volver a cobrarlo
+        const { rows: [cur] } = await q('SELECT * FROM charges WHERE id=$1', [row.id])
+        return reply.send({ idempotent: true, charge: publicCharge(cur, input.meter) })
+      }
+      // 'no_funds' → sigue al wallet
+    }
+
     try {
       const updated = await executeCharge(row.id, input, req.log)
       return reply.code(201).send({ test_mode: false, charge: publicCharge(updated, input.meter) })
@@ -124,9 +141,12 @@ export default async function publicApiRoutes(app) {
     const { rows: [conn] } = await q('SELECT * FROM connections WHERE location_id=$1', [req.params.locationId])
     if (!conn) return reply.code(404).send({ error: 'Subcuenta no conectada' })
     if (conn.status !== 'connected') return reply.code(409).send({ error: `Conexión en estado "${conn.status}"` })
+    // el crédito interno se consume ANTES que el wallet: si hay saldo, hay fondos
+    const credit = await getBalance(req.params.locationId)
+    if (credit > 0) return { hasFunds: true, credit, wallet_has_funds: null }
     try {
       const data = await ghl.hasFunds(conn.id)
-      return { hasFunds: Boolean(data?.hasFunds) }
+      return { hasFunds: Boolean(data?.hasFunds), credit, wallet_has_funds: Boolean(data?.hasFunds) }
     } catch (err) {
       return reply.code(502).send({ error: `GHL no respondió: ${err.message}` })
     }
@@ -204,6 +224,7 @@ export default async function publicApiRoutes(app) {
     if (!locationAllowed(req.consumerApp, locationId)) {
       return reply.code(403).send({ error: 'Esta API key no está autorizada para esa subcuenta' })
     }
-    return checkAccess(req.consumerApp.id, locationId)
+    const access = await checkAccess(req.consumerApp.id, locationId)
+    return { ...access, credit: await getBalance(locationId) }
   })
 }

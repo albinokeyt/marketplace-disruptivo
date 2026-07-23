@@ -35,7 +35,10 @@ export default function Charges() {
   useEffect(() => { load(0) }, [load])
 
   const refund = async (c) => {
-    if (!confirm(`¿Reembolsar el cargo #${c.id} (${fmtUsd(c.amount)}) de ${c.app_name}? Se borra el cargo en GHL y se devuelve el saldo al wallet.`)) return
+    const destino = c.paid_with === 'credit'
+      ? 'Se devuelve el importe al saldo de crédito interno de la subcuenta.'
+      : 'Se borra el cargo en GHL y se devuelve el saldo al wallet.'
+    if (!confirm(`¿Reembolsar el cargo #${c.id} (${fmtUsd(c.amount)}) de ${c.app_name}? ${destino}`)) return
     await api.post(`/api/admin/charges/${c.id}/refund`).catch((e) => alert(e.message))
     load(offset)
   }
@@ -109,7 +112,10 @@ export default function Charges() {
                   </Td>
                   <Td className="text-ink2">{c.meter || '—'}</Td>
                   <Td className="text-right tabular-nums">{c.units}</Td>
-                  <Td className="text-right tabular-nums">{fmtUsd(c.amount)}</Td>
+                  <Td className="text-right tabular-nums">
+                    {fmtUsd(c.amount)}
+                    <div className="text-[10px] text-mut">{c.paid_with === 'credit' ? 'crédito' : 'wallet'}</div>
+                  </Td>
                   <Td><Badge status={c.status} /></Td>
                   <Td className="text-ink2 whitespace-nowrap">{fmtDate(c.created_at)}</Td>
                   <Td className="text-right whitespace-nowrap">

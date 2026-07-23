@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Boxes, Package, BadgeCheck, Receipt, Gauge, Plug, Bell,
-  Users2, Settings as SettingsIcon, LogOut, Store as StoreIcon, ExternalLink,
+  Users2, Coins, Settings as SettingsIcon, LogOut, Store as StoreIcon, ExternalLink,
 } from 'lucide-react'
 import { api } from './api.js'
 import { trySsoLogin } from './sso.js'
@@ -14,6 +14,7 @@ import Subscriptions from './pages/Subscriptions.jsx'
 import Charges from './pages/Charges.jsx'
 import Meters from './pages/Meters.jsx'
 import Connections from './pages/Connections.jsx'
+import Credits from './pages/Credits.jsx'
 import UsersPage from './pages/Users.jsx'
 import Notices from './pages/Notices.jsx'
 import Settings from './pages/Settings.jsx'
@@ -27,6 +28,7 @@ const NAV = [
   { to: '/planes', icon: Package, label: 'Planes' },
   { to: '/suscripciones', icon: BadgeCheck, label: 'Suscripciones' },
   { to: '/usuarios', icon: Users2, label: 'Usuarios' },
+  { to: '/creditos', icon: Coins, label: 'Créditos' },
   { to: '/cobros', icon: Receipt, label: 'Cobros' },
   { to: '/tarifas', icon: Gauge, label: 'Tarifas' },
   { to: '/conexiones', icon: Plug, label: 'Conexiones' },
@@ -139,6 +141,7 @@ function AdminApp({ location }) {
               <Route path="/planes" element={<Plans />} />
               <Route path="/suscripciones" element={<Subscriptions />} />
               <Route path="/usuarios" element={<UsersPage />} />
+              <Route path="/creditos" element={<Credits />} />
               <Route path="/cobros" element={<Charges />} />
               <Route path="/tarifas" element={<Meters />} />
               <Route path="/conexiones" element={<Connections />} />

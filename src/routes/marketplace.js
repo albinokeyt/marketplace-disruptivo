@@ -1,6 +1,7 @@
 import { q, numOr } from '../db.js'
 import { requireAdmin } from '../lib/session.js'
 import { derivedStatus } from '../lib/access.js'
+import { grantCredit } from '../lib/credits.js'
 
 const slugify = (s, id) =>
   (String(s || 'app').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'app') + '-' + id
@@ -240,6 +241,61 @@ export default async function marketplaceRoutes(app) {
     )
     if (!row) return reply.code(404).send({ error: 'Suscripción no encontrada' })
     return { canceled: true }
+  })
+
+  // ---------------- Créditos (saldo interno por subcuenta) ----------------
+  app.get('/api/admin/credits', guard, async () => {
+    const { rows } = await q(
+      `SELECT k.location_id,
+              COALESCE(NULLIF(k.alias,''), k.name, k.location_id) AS location_name,
+              COALESCE(c.balance, 0) AS balance,
+              COALESCE(g.granted, 0) AS granted,
+              COALESCE(g.spent, 0) AS spent,
+              COALESCE(g.refunded, 0) AS refunded
+       FROM connections k
+       LEFT JOIN credits c ON c.location_id = k.location_id
+       LEFT JOIN (
+         SELECT location_id,
+                SUM(amount) FILTER (WHERE amount > 0 AND charge_id IS NULL) AS granted,
+                -SUM(amount) FILTER (WHERE amount < 0) AS spent,
+                SUM(amount) FILTER (WHERE amount > 0 AND charge_id IS NOT NULL) AS refunded
+         FROM credit_entries GROUP BY location_id
+       ) g ON g.location_id = k.location_id
+       ORDER BY COALESCE(c.balance,0) DESC, k.created_at DESC`
+    )
+    return {
+      credits: rows.map((r) => ({
+        location_id: r.location_id, location_name: r.location_name,
+        balance: numOr(r.balance, 0), granted: numOr(r.granted, 0), spent: numOr(r.spent, 0),
+        refunded: numOr(r.refunded, 0),
+      })),
+    }
+  })
+
+  app.post('/api/admin/credits', guard, async (req, reply) => {
+    const b = req.body || {}
+    const locationId = String(b.location_id || '').trim()
+    const amount = numOr(b.amount)
+    if (!locationId) return reply.code(400).send({ error: 'Falta location_id' })
+    if (amount === null || amount === 0) return reply.code(400).send({ error: 'Importe inválido' })
+    if (Math.abs(amount) > 1_000_000) return reply.code(400).send({ error: 'Importe fuera de rango' })
+    const { rows: [conn] } = await q('SELECT 1 FROM connections WHERE location_id=$1', [locationId])
+    if (!conn) return reply.code(404).send({ error: 'Subcuenta no conectada' })
+    try {
+      const r = await grantCredit(locationId, amount, b.reason)
+      return { balance: r.balance, applied: r.applied }
+    } catch (err) {
+      // solo se traducen los errores de validación propios; lo inesperado va al handler global
+      if (err.statusCode >= 400 && err.statusCode < 500) return reply.code(err.statusCode).send({ error: err.message })
+      throw err
+    }
+  })
+
+  app.get('/api/admin/credits/:locationId/entries', guard, async (req) => {
+    const { rows } = await q(
+      `SELECT amount, reason, charge_id, created_at FROM credit_entries
+       WHERE location_id=$1 ORDER BY created_at DESC LIMIT 100`, [req.params.locationId])
+    return { entries: rows.map((r) => ({ ...r, amount: numOr(r.amount, 0) })) }
   })
 
   // Avisos / notificaciones

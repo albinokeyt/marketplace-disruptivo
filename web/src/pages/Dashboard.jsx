@@ -118,14 +118,21 @@ export default function Dashboard() {
         <Stat label="Últimos 7 días" value={<Money n={data.totals.last7} />} />
         <Stat label="Últimos 30 días" value={<Money n={data.totals.last30} />} />
         <Stat
-          label="Total histórico"
+          label="Total histórico (wallet)"
           value={<Money n={data.totals.all_time} />}
           sub={`${data.counts.apps} apps · ${data.counts.connections} conexiones · ${data.counts.meters} tarifas${unknown ? ` · ${unknown} sin confirmar` : ''}${failed ? ` · ${failed} fallidos` : ''}`}
         />
       </div>
 
       <Card>
-        <h2 className="text-sm font-semibold mb-3">Facturación · últimos 14 días</h2>
+        <div className="flex items-baseline justify-between mb-3">
+          <h2 className="text-sm font-semibold">Facturación al wallet · últimos 14 días</h2>
+          {data.totals.credit_last30 > 0 && (
+            <span className="text-[11px] text-ok">
+              + {fmtUsd(data.totals.credit_last30)} cubierto con crédito interno (30 d)
+            </span>
+          )}
+        </div>
         <BarChart series={data.series} />
       </Card>
 

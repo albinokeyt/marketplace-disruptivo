@@ -19,7 +19,11 @@ El centro de apps del **Departamento Disruptivo**: **tienda pública** de tus ap
 - **Accesos y suscripciones**: da acceso de una subcuenta a una app o plan, por meses o indefinido, de pago/prueba/cortesía. Tus apps preguntan con `GET /api/v1/access/<locationId>`.
 - **Planes**: bundles de apps con días de prueba y duración.
 - **Usuarios y portal**: creas clientes con **login propio** (email+contraseña, aunque no estén en GHL), les asignas subcuentas, y cada uno entra a **su portal** donde ve **su** consumo (gasto por app, histórico), sus accesos activos y los avisos. Tú (admin) ves el de todos.
+- **Créditos**: saldo interno por subcuenta que tú concedes (promo, compensación, prepago). Los cobros lo consumen **antes** de tocar el wallet de GHL; si no cubre el importe, ese cobro va al wallet. Ledger auditable de cada movimiento.
 - **Avisos**: comunicados internos, banners en la tienda y en el portal del cliente.
+
+## Créditos: cómo se contabilizan
+Un cargo guarda con qué se pagó (`paid_with`: `wallet` | `credit`). **«Facturado» en el dashboard = solo `wallet`** (dinero real que cobra GHL); lo cubierto con crédito se muestra aparte para no inflar los ingresos. `GET /api/v1/access/:loc` y `has-funds` incluyen el saldo, así que una app con crédito disponible sabe que puede operar aunque el wallet esté a 0. El crédito solo se aplica a cargos **nuevos**: un reintento pasa por GHL para conservar la deduplicación por `eventId`.
 
 ## Roles y acceso
 - **Super-admin**: entra con `ADMIN_USER`/`ADMIN_PASS` (o SSO de GHL) → panel completo.

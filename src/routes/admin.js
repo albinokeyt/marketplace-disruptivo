@@ -96,20 +96,27 @@ export default async function adminRoutes(app) {
   // ---------- dashboard ----------
   app.get('/api/admin/dashboard', guard, async () => {
     const [totals, byStatus, series, topApps, recent, counts] = await Promise.all([
+      // "Facturado" = solo lo cobrado al WALLET (dinero real). Lo pagado con crédito interno
+      // (saldo regalado/prepagado) se reporta aparte para no inflar los ingresos.
       q(`SELECT
-           COALESCE(SUM(amount) FILTER (WHERE created_at >= date_trunc('day', now())), 0) AS today,
-           COALESCE(SUM(amount) FILTER (WHERE created_at >= now() - interval '7 days'), 0) AS last7,
-           COALESCE(SUM(amount) FILTER (WHERE created_at >= now() - interval '30 days'), 0) AS last30,
-           COALESCE(SUM(amount), 0) AS all_time
+           COALESCE(SUM(amount) FILTER (WHERE paid_with='wallet' AND created_at >= date_trunc('day', now())), 0) AS today,
+           COALESCE(SUM(amount) FILTER (WHERE paid_with='wallet' AND created_at >= now() - interval '7 days'), 0) AS last7,
+           COALESCE(SUM(amount) FILTER (WHERE paid_with='wallet' AND created_at >= now() - interval '30 days'), 0) AS last30,
+           COALESCE(SUM(amount) FILTER (WHERE paid_with='wallet'), 0) AS all_time,
+           COALESCE(SUM(amount) FILTER (WHERE paid_with='credit' AND created_at >= now() - interval '30 days'), 0) AS credit_last30,
+           COALESCE(SUM(amount) FILTER (WHERE paid_with='credit'), 0) AS credit_all_time
          FROM charges WHERE status = 'created'`),
       q(`SELECT status, COUNT(*)::int AS n FROM charges GROUP BY status`),
       q(`SELECT to_char(d.day, 'YYYY-MM-DD') AS day,
-                COALESCE(SUM(c.amount) FILTER (WHERE c.status='created'), 0) AS amount,
+                COALESCE(SUM(c.amount) FILTER (WHERE c.status='created' AND c.paid_with='wallet'), 0) AS amount,
+                COALESCE(SUM(c.amount) FILTER (WHERE c.status='created' AND c.paid_with='credit'), 0) AS credit,
                 COUNT(c.id) FILTER (WHERE c.status='created')::int AS charges
          FROM generate_series(date_trunc('day', now()) - interval '13 days', date_trunc('day', now()), interval '1 day') AS d(day)
          LEFT JOIN charges c ON date_trunc('day', c.created_at) = d.day
          GROUP BY d.day ORDER BY d.day`),
-      q(`SELECT a.id, a.name, COALESCE(SUM(c.amount) FILTER (WHERE c.status='created'), 0) AS amount,
+      q(`SELECT a.id, a.name,
+                COALESCE(SUM(c.amount) FILTER (WHERE c.status='created' AND c.paid_with='wallet'), 0) AS amount,
+                COALESCE(SUM(c.amount) FILTER (WHERE c.status='created' AND c.paid_with='credit'), 0) AS credit,
                 COUNT(c.id)::int AS charges
          FROM apps a
          LEFT JOIN charges c ON c.app_id = a.id AND c.created_at >= now() - interval '30 days'
@@ -129,7 +136,7 @@ export default async function adminRoutes(app) {
     return {
       totals: Object.fromEntries(Object.entries(totals.rows[0]).map(([k, v]) => [k, numOr(v, 0)])),
       by_status: byStatus.rows,
-      series: series.rows.map((r) => ({ day: r.day, amount: numOr(r.amount, 0), charges: r.charges })),
+      series: series.rows.map((r) => ({ day: r.day, amount: numOr(r.amount, 0), credit: numOr(r.credit, 0), charges: r.charges })),
       top_apps: topApps.rows.map((r) => ({ ...r, amount: numOr(r.amount, 0) })),
       recent: recent.rows.map((r) => ({ ...publicCharge(r), app_name: r.app_name, location_name: r.location_name })),
       counts: counts.rows[0],
@@ -140,11 +147,12 @@ export default async function adminRoutes(app) {
   app.get('/api/admin/apps', guard, async () => {
     const { rows } = await q(
       `SELECT a.*, COUNT(c.id)::int AS charges_count,
-              COALESCE(SUM(c.amount) FILTER (WHERE c.status='created'), 0) AS amount_total
+              COALESCE(SUM(c.amount) FILTER (WHERE c.status='created' AND c.paid_with='wallet'), 0) AS amount_total,
+              COALESCE(SUM(c.amount) FILTER (WHERE c.status='created' AND c.paid_with='credit'), 0) AS credit_total
        FROM apps a LEFT JOIN charges c ON c.app_id = a.id
        GROUP BY a.id ORDER BY a.created_at DESC`
     )
-    return { apps: rows.map((r) => ({ ...r, key_hash: undefined, amount_total: numOr(r.amount_total, 0) })) }
+    return { apps: rows.map((r) => ({ ...r, key_hash: undefined, amount_total: numOr(r.amount_total, 0), credit_total: numOr(r.credit_total, 0) })) }
   })
 
   app.post('/api/admin/apps', guard, async (req, reply) => {
@@ -295,11 +303,12 @@ export default async function adminRoutes(app) {
       `SELECT k.id, k.location_id, k.company_id, k.alias, k.name, k.test_mode, k.status,
               k.created_at, k.updated_at, (k.refresh_token IS NOT NULL) AS has_tokens,
               COUNT(c.id)::int AS charges_count,
-              COALESCE(SUM(c.amount) FILTER (WHERE c.status='created'), 0) AS amount_total
+              COALESCE(SUM(c.amount) FILTER (WHERE c.status='created' AND c.paid_with='wallet'), 0) AS amount_total,
+              COALESCE(SUM(c.amount) FILTER (WHERE c.status='created' AND c.paid_with='credit'), 0) AS credit_total
        FROM connections k LEFT JOIN charges c ON c.connection_id = k.id
        GROUP BY k.id ORDER BY k.created_at DESC`
     )
-    return { connections: rows.map((r) => ({ ...r, amount_total: numOr(r.amount_total, 0) })) }
+    return { connections: rows.map((r) => ({ ...r, amount_total: numOr(r.amount_total, 0), credit_total: numOr(r.credit_total, 0) })) }
   })
 
   app.patch('/api/admin/connections/:id', guard, async (req, reply) => {

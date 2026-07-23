@@ -1,5 +1,6 @@
 import { q, numOr } from '../db.js'
 import { getGhlConfig, isGlobalTestMode } from './settings.js'
+import { refundChargeCredit } from './credits.js'
 import * as ghl from './ghl.js'
 
 // límites de las columnas numeric(12,6) / numeric(14,6)
@@ -22,6 +23,7 @@ export const publicCharge = (row, meter = null) => ({
   amount: numOr(row.amount),
   currency: row.currency,
   status: row.status,
+  paid_with: row.paid_with || 'wallet',
   ghl_charge_id: row.ghl_charge_id,
   description: row.description,
   error: row.error,
@@ -208,6 +210,13 @@ export async function refundCharge(row) {
   if (row.status === 'test') {
     const { rows: [updated] } = await q(
       `UPDATE charges SET status='refunded', updated_at=now() WHERE id=$1 RETURNING *`, [row.id])
+    return updated
+  }
+  // pagado con crédito interno: marcar reembolsado y devolver el saldo van en la MISMA transacción
+  if (row.paid_with === 'credit') {
+    if (row.status !== 'created') throw fail(409, `Solo se pueden reembolsar cargos completados (estado actual: ${row.status})`)
+    const updated = await refundChargeCredit(row)
+    if (!updated) throw fail(409, 'El cargo ya no está en estado cobrable')
     return updated
   }
   if (row.status !== 'created' || !row.ghl_charge_id) {

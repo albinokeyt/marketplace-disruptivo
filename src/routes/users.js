@@ -93,12 +93,16 @@ export default async function userRoutes(app) {
   // Mi gasto: solo mis subcuentas (un usuario nunca ve el de otro)
   app.get('/api/me/usage', { preHandler: requireAuth }, async (req, reply) => {
     const scope = await scopeFor(req.session)
-    if (!scope.all && scope.locs.length === 0) return { totals: { last30: 0, all_time: 0 }, by_app: [], recent: [] }
+    if (!scope.all && scope.locs.length === 0) {
+      return { totals: { last30: 0, all_time: 0 }, credit: 0, credit_used: { last30: 0, all_time: 0 }, by_app: [], recent: [] }
+    }
     const locFilter = scope.all ? '' : 'AND c.location_id = ANY($1)'
     const params = scope.all ? [] : [scope.locs]
     const [totals, byApp, recent] = await Promise.all([
       q(`SELECT COALESCE(SUM(amount) FILTER (WHERE created_at >= now() - interval '30 days'),0) AS last30,
-                COALESCE(SUM(amount),0) AS all_time
+                COALESCE(SUM(amount),0) AS all_time,
+                COALESCE(SUM(amount) FILTER (WHERE paid_with='credit' AND created_at >= now() - interval '30 days'),0) AS credit_last30,
+                COALESCE(SUM(amount) FILTER (WHERE paid_with='credit'),0) AS credit_all_time
          FROM charges c WHERE status='created' ${locFilter}`, params),
       q(`SELECT a.name AS app_name, COALESCE(SUM(c.amount) FILTER (WHERE c.status='created'),0) AS amount, COUNT(c.id)::int AS charges
          FROM charges c JOIN apps a ON a.id=c.app_id
@@ -111,8 +115,14 @@ export default async function userRoutes(app) {
          WHERE c.status IN ('created','test') ${locFilter}
          ORDER BY c.created_at DESC LIMIT 30`, params),
     ])
+    // saldo de crédito disponible (suma de sus subcuentas)
+    const credit = scope.all
+      ? await q('SELECT COALESCE(SUM(balance),0) AS c FROM credits')
+      : await q('SELECT COALESCE(SUM(balance),0) AS c FROM credits WHERE location_id = ANY($1)', [scope.locs])
     return {
       totals: { last30: numOr(totals.rows[0].last30, 0), all_time: numOr(totals.rows[0].all_time, 0) },
+      credit: numOr(credit.rows[0].c, 0),
+      credit_used: { last30: numOr(totals.rows[0].credit_last30, 0), all_time: numOr(totals.rows[0].credit_all_time, 0) },
       by_app: byApp.rows.map((r) => ({ ...r, amount: numOr(r.amount, 0) })),
       recent: recent.rows.map((r) => ({ ...r, amount: numOr(r.amount, 0), units: numOr(r.units) })),
     }
