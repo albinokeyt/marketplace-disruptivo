@@ -33,6 +33,8 @@ Un cargo guarda con qué se pagó (`paid_with`: `wallet` | `credit`). **«Factur
 
 Node 22 + Fastify + Postgres + Redis, panel React (Vite + Tailwind v4). Un solo contenedor Docker.
 
+> 📘 **Guía completa paso a paso (EasyPanel + app de GHL + primer cobro):** [DEPLOY.md](DEPLOY.md)
+
 ## Despliegue en EasyPanel
 
 1. Crea 3 servicios en un proyecto:
