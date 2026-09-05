@@ -40,8 +40,8 @@ Node 22 + Fastify + Postgres + Redis, panel React (Vite + Tailwind v4). Un solo 
 1. Crea 3 servicios en un proyecto:
    - **marketplace-db** → Postgres 17 (guarda la contraseña)
    - **marketplace-redis** → Redis 7
-   - **wallet** → App desde este repo de GitHub (build con Dockerfile)
-2. Variables de entorno del servicio **wallet** (ver `.env.example`):
+   - **marketplace** → App desde este repo de GitHub (build con Dockerfile)
+2. Variables de entorno del servicio **marketplace** (ver `.env.example`):
 
 | Variable | Valor |
 |---|---|
@@ -49,7 +49,7 @@ Node 22 + Fastify + Postgres + Redis, panel React (Vite + Tailwind v4). Un solo 
 | `DATABASE_URL` | `postgres://<user>:<pass>@marketplace-db:5432/marketplace` |
 | `REDIS_URL` | `redis://default:<pass>@marketplace-redis:6379` |
 | `ADMIN_USER` / `ADMIN_PASS` | login del panel |
-| `APP_BASE_URL` | URL pública, p. ej. `https://wallet.escaladoacelerado.es` |
+| `APP_BASE_URL` | URL pública, p. ej. `https://marketplace.escaladoacelerado.es` |
 
 3. Apunta el dominio al puerto 8080. Las migraciones corren solas al arrancar.
 4. Health check para EasyPanel/Docker: `GET /healthz` (verifica Postgres + Redis; 200 si todo OK, 503 si no). El Dockerfile ya trae su `HEALTHCHECK`.
