@@ -39,7 +39,7 @@ del servicio). Copia la cadena de conexión que te da y ajusta el resto.
 
 1. En el servicio `marketplace` → **Domains**: añade tu dominio apuntando al **puerto 8080** y activa HTTPS.
 2. Pulsa **Deploy**. El primer build tarda unos minutos (compila el panel React).
-3. Las **migraciones (001→004) corren solas** al arrancar. No tienes que ejecutar nada.
+3. Las **migraciones (001→005) corren solas** al arrancar. No tienes que ejecutar nada.
 
 ### A4. Comprobar que está vivo
 
