@@ -1,6 +1,6 @@
 import { q, numOr } from '../db.js'
 import { getGhlConfig, isGlobalTestMode } from './settings.js'
-import { refundChargeCredit } from './credits.js'
+import { refundChargeCredit, reverseTopupCredit, restoreTopupCredit } from './credits.js'
 import * as ghl from './ghl.js'
 
 // límites de las columnas numeric(12,6) / numeric(14,6)
@@ -24,6 +24,7 @@ export const publicCharge = (row, meter = null) => ({
   currency: row.currency,
   status: row.status,
   paid_with: row.paid_with || 'wallet',
+  kind: row.kind || 'usage',
   ghl_charge_id: row.ghl_charge_id,
   description: row.description,
   error: row.error,
@@ -132,6 +133,35 @@ export async function reconcileCharge(row) {
   return updated ? { verified: updated } : { verified: row }
 }
 
+// ¿GHL ya registró la DEVOLUCIÓN de este cargo? Se consulta ANTES de repetir un DELETE tras un intento
+// anterior: un segundo DELETE sobre un cargo ya devuelto podría responder 400 «already refunded» (que se
+// leería como rechazo → crédito restituido = doble beneficio) o incluso devolver el dinero otra vez.
+// Devuelve { refunded: bool } o { unreachable: true }.
+export async function ghlRefundState(row) {
+  let data
+  try {
+    data = await ghl.listCharges(row.connection_id, { eventId: `dw-${row.id}`, limit: 10 })
+  } catch {
+    return { unreachable: true }
+  }
+  const list = Array.isArray(data) ? data : data?.charges || data?.data || []
+  const refunded = Array.isArray(list) && list.some((c) => c && (
+    c.transactionType === 'refund' || c.status === 'refunded' || c.isRefunded === true || c.refunded === true))
+  return { refunded }
+}
+
+// Mensaje de GHL que indica que el cargo YA estaba devuelto/borrado: es un éxito del reembolso, no un rechazo.
+export const isAlreadyRefundedError = (err) =>
+  /already\s+(been\s+)?(refund|delet|revers|cancel)|(refund|delet|revers)\w*\s+already/i
+    .test(`${err?.message || ''} ${err?.data ? JSON.stringify(err.data) : ''}`)
+
+// ¿Esta recarga ya pasó por un intento de reembolso (ambiguo o rechazado)? Entonces no se repite el DELETE a ciegas.
+export const priorRefundAttempt = (row) => /^Reembolso (sin confirmación|rechazado|no enviado|en verificación)/.test(row?.error || '')
+
+// Clasifica el fallo de un DELETE en GHL: preSend (token/conexión) o 4xx (salvo 408/429) = rechazo concluyente.
+export const deleteRejected = (err) =>
+  err.preSend === true || (err.status >= 400 && err.status < 500 && ![404, 408, 429].includes(err.status))
+
 // Ejecuta el cargo contra GHL sobre una fila ya reservada en estado pending. Devuelve la fila actualizada.
 export async function executeCharge(rowId, input, log) {
   const cfg = await getGhlConfig()
@@ -167,7 +197,8 @@ export async function executeCharge(rowId, input, log) {
     const dupBlob = `${err.message} ${err.data ? JSON.stringify(err.data) : ''}`
     const duplicate = err.status === 409 || /duplicat|already\s*ex[ií]st/i.test(dupBlob)
     // Otros 4xx (400/422/403…) = rechazo concluyente (no cobró). Timeout/red/5xx/duplicado = AMBIGUO → 'unknown'.
-    const conclusive = err.status >= 400 && err.status < 500 && !duplicate
+    // preSend = falló antes de enviar nada a GHL (token/refresh): concluyente, nunca cobró
+    const conclusive = (err.status >= 400 && err.status < 500 && !duplicate) || err.preSend === true
     const newStatus = conclusive ? 'failed' : 'unknown'
     log?.error({ err: err.message, rowId, status: newStatus, duplicate }, 'cargo GHL falló')
     const { rows: [updated] } = await q(
@@ -218,6 +249,71 @@ export async function refundCharge(row) {
     const updated = await refundChargeCredit(row)
     if (!updated) throw fail(409, 'El cargo ya no está en estado cobrable')
     return updated
+  }
+  // RECARGA (kind='topup'): el cliente pagó del wallet y recibió crédito.
+  // 1) reclamar la fila ('refunding') → dos reembolsos concurrentes o un reintento no retiran dos veces
+  // 2) retirar el crédito COMPLETO de forma atómica (si ya lo consumió, no se reembolsa)
+  // 3) devolver el dinero en GHL; si falla, restituir el crédito y volver a 'created'
+  if (row.kind === 'topup') {
+    const revert = (msg) => q(
+      `UPDATE charges SET status='created', error=$2, updated_at=now() WHERE id=$1 AND status='refunding'`,
+      [row.id, msg ? String(msg).slice(0, 500) : null])
+    const note = (msg) => q(`UPDATE charges SET error=$2, updated_at=now() WHERE id=$1 AND status='refunding'`,
+      [row.id, String(msg).slice(0, 500)])
+    // el reclamo exige cargo de GHL asociado: nunca entrar en 'refunding' sin poder devolver el dinero
+    const { rows: [claimed] } = await q(
+      `UPDATE charges SET status='refunding', updated_at=now()
+       WHERE id=$1 AND status='created' AND kind='topup' AND ghl_charge_id IS NOT NULL AND connection_id IS NOT NULL
+       RETURNING *`, [row.id])
+    if (!claimed) {
+      // explicar la causa REAL del rechazo con el estado actual de la fila (no el de la lista del admin)
+      const { rows: [cur] } = await q('SELECT status, ghl_charge_id, connection_id FROM charges WHERE id=$1', [row.id])
+      const st = cur?.status ?? row.status
+      if (st === 'refunding' || st === 'refunded') throw fail(409, `La recarga ya está reembolsada o en curso de reembolso (estado actual: ${st})`)
+      if (st !== 'created') throw fail(409, `Solo se reembolsan recargas cobradas (estado actual: ${st})`)
+      if (!cur?.ghl_charge_id) throw fail(409, 'La recarga no tiene cargo de GHL asociado')
+      if (!cur?.connection_id) throw fail(409, 'La recarga no tiene conexión asociada')
+      throw fail(409, 'La recarga cambió de estado hace un instante: recarga la lista e inténtalo de nuevo')
+    }
+    const finish = async () => {
+      const { rows: [updated] } = await q(
+        `UPDATE charges SET status='refunded', error=NULL, updated_at=now() WHERE id=$1 AND status='refunding' RETURNING *`, [row.id])
+      return updated || claimed
+    }
+    const rev = await reverseTopupCredit(claimed)
+    if (!rev.ok) {
+      await revert()
+      if (rev.reason === 'not_credited') throw fail(409, 'El crédito de esta recarga aún no está abonado (se abonará en breve); vuelve a intentarlo después')
+      throw fail(409, 'El cliente ya consumió parte de esta recarga: ajusta el crédito a mano antes de reembolsar')
+    }
+    // Si ya hubo un intento anterior, preguntar a GHL si el dinero YA se devolvió antes de repetir el DELETE
+    if (priorRefundAttempt(claimed)) {
+      const st = await ghlRefundState(claimed)
+      if (st.refunded) return finish()
+      if (st.unreachable) {
+        // no se ha enviado nada nuevo; se deja en 'refunding' y sweepRefunding lo resuelve con la misma comprobación
+        await note('Reembolso en verificación: GHL no respondió al comprobar si ya estaba devuelto')
+        throw fail(502, 'GHL no respondió: el reembolso queda en verificación y se completará solo. No lo repitas.')
+      }
+    }
+    try {
+      await ghl.deleteCharge(claimed.connection_id, claimed.ghl_charge_id)
+    } catch (err) {
+      // 404 o «already refunded» = GHL ya no tiene nada que devolver: el reembolso está hecho
+      if (err.status === 404 || isAlreadyRefundedError(err)) return finish()
+      if (deleteRejected(err)) {
+        // GHL RECHAZÓ devolver el dinero (o la conexión está rota y nada salió): el crédito vuelve al
+        // cliente al instante y la recarga sigue vigente — mismo criterio que executeCharge y sweepRefunding
+        await restoreTopupCredit(claimed)
+        await revert(err.preSend ? `Reembolso no enviado: ${err.message}` : `Reembolso rechazado por GHL: ${err.message}`)
+        throw err
+      }
+      // AMBIGUO (timeout/red/5xx): GHL pudo haber borrado el cargo. NO restaurar el crédito:
+      // la fila queda en 'refunding' y sweepRefunding lo completa de forma idempotente.
+      await note(`Reembolso sin confirmación de GHL: ${err.message}`)
+      throw fail(502, 'Reembolso sin confirmación de GHL: queda en verificación y se completará solo. No lo repitas.')
+    }
+    return finish()
   }
   if (row.status !== 'created' || !row.ghl_charge_id) {
     throw fail(409, `Solo se pueden reembolsar cargos completados (estado actual: ${row.status})`)

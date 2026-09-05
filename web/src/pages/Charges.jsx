@@ -35,9 +35,11 @@ export default function Charges() {
   useEffect(() => { load(0) }, [load])
 
   const refund = async (c) => {
-    const destino = c.paid_with === 'credit'
-      ? 'Se devuelve el importe al saldo de crédito interno de la subcuenta.'
-      : 'Se borra el cargo en GHL y se devuelve el saldo al wallet.'
+    const destino = c.kind === 'topup'
+      ? 'Es una RECARGA: se retira el crédito interno completo y se devuelve el dinero al wallet de GHL. Si el cliente ya gastó parte del saldo, el reembolso se rechazará.'
+      : c.paid_with === 'credit'
+        ? 'Se devuelve el importe al saldo de crédito interno de la subcuenta.'
+        : 'Se borra el cargo en GHL y se devuelve el saldo al wallet.'
     if (!confirm(`¿Reembolsar el cargo #${c.id} (${fmtUsd(c.amount)}) de ${c.app_name}? ${destino}`)) return
     await api.post(`/api/admin/charges/${c.id}/refund`).catch((e) => alert(e.message))
     load(offset)
@@ -53,6 +55,18 @@ export default function Charges() {
     } catch (e) {
       alert(e.message)
     }
+  }
+
+  // recarga 'unknown' que bloquea nuevas recargas: el admin la cierra (pregunta a GHL; si no existe → descartada)
+  const discard = async (c) => {
+    if (!confirm(`¿Cerrar la recarga #${c.id}? Se consultará a GHL: si el cobro existe se marcará cobrada y se abonará el crédito; si no, se descartará.\n\nEspera al menos 3 minutos desde el fallo: GHL puede tardar en listar un cobro. Una recarga descartada se sigue vigilando 24 h y puedes «Reconciliar» si aparece después.`)) return
+    try {
+      const d = await api.post(`/api/admin/charges/${c.id}/discard`)
+      alert(d.result === 'cobrado'
+        ? 'GHL confirma el cobro: recarga marcada como cobrada y crédito abonado.'
+        : 'Recarga descartada: GHL no la reconoce. Si GHL acaba asentando el cobro, se abonará solo (se revisa 24 h) o puedes Reconciliar a mano.')
+      load(offset)
+    } catch (e) { alert(e.message) }
   }
 
   const set = (k) => (e) => setFilters((f) => ({ ...f, [k]: e.target.value }))
@@ -75,6 +89,7 @@ export default function Charges() {
             <option value="unknown">Sin confirmar</option>
             <option value="failed">Fallido</option>
             <option value="refunded">Reembolsado</option>
+            <option value="refunding">Reembolsando</option>
           </Select>
           <Input label="Location ID" placeholder="ewGlt5…" value={filters.location_id} onChange={set('location_id')} />
           <Input label="Desde" type="date" value={filters.from} onChange={set('from')} />
@@ -114,13 +129,16 @@ export default function Charges() {
                   <Td className="text-right tabular-nums">{c.units}</Td>
                   <Td className="text-right tabular-nums">
                     {fmtUsd(c.amount)}
-                    <div className="text-[10px] text-mut">{c.paid_with === 'credit' ? 'crédito' : 'wallet'}</div>
+                    <div className="text-[10px] text-mut">{c.kind === 'topup' ? 'recarga' : c.paid_with === 'credit' ? 'crédito' : 'wallet'}</div>
                   </Td>
                   <Td><Badge status={c.status} /></Td>
                   <Td className="text-ink2 whitespace-nowrap">{fmtDate(c.created_at)}</Td>
                   <Td className="text-right whitespace-nowrap">
-                    {(c.status === 'unknown' || c.status === 'pending') && (
-                      <button className="text-xs text-warn/90 hover:text-warn mr-3" onClick={() => reconcile(c)}>Reconciliar</button>
+                    {(c.status === 'unknown' || c.status === 'pending' || (c.kind === 'topup' && c.status === 'failed')) && (
+                      <button className="text-xs text-warn/90 hover:text-warn mr-3" title={c.status === 'failed' ? 'Volver a preguntar a GHL por esta recarga descartada' : undefined} onClick={() => reconcile(c)}>Reconciliar</button>
+                    )}
+                    {c.kind === 'topup' && c.status === 'unknown' && (
+                      <button className="text-xs text-bad/80 hover:text-bad mr-3" title="Cerrar esta recarga sin confirmar" onClick={() => discard(c)}>Descartar</button>
                     )}
                     {(c.status === 'created' || c.status === 'test') && (
                       <button className="text-xs text-bad/80 hover:text-bad" onClick={() => refund(c)}>Reembolsar</button>

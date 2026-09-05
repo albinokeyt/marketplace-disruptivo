@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, History } from 'lucide-react'
+import { Plus, History, Wallet } from 'lucide-react'
 import { api, fmtUsd, fmtDate } from '../api.js'
 import { Card, Button, Input, Select, Modal, Th, Td, Empty } from '../components/ui.jsx'
 
@@ -74,10 +74,57 @@ function EntriesModal({ row, onClose }) {
   )
 }
 
+// Recarga en nombre del cliente: cobro REAL a su wallet de GHL → crédito interno
+function TopupModal({ credits, onClose, onSaved }) {
+  const [f, setF] = useState({ location_id: '', amount: '' })
+  const [busy, setBusy] = useState(false)
+  const [cfg, setCfg] = useState(null)
+  useEffect(() => { api.get('/api/me/topup-config').then(setCfg).catch(() => setCfg({ enabled: false, min: 1, max: 0 })) }, [])
+  const amtNum = Number(f.amount)
+  const valid = Boolean(cfg?.enabled) && Number.isFinite(amtNum) && amtNum >= cfg.min && amtNum <= cfg.max
+  const go = async (e) => {
+    e.preventDefault()
+    if (!cfg?.enabled) return alert('Las recargas están desactivadas o falta la tarifa de recarga (Configuración → Recargas).')
+    if (!valid) return alert(`El importe debe estar entre ${cfg.min} y ${cfg.max} USD`)
+    const amt = Math.round(amtNum * 100) / 100
+    if (!confirm(`Se cobrarán ${fmtUsd(amt)} del wallet de GoHighLevel de esa subcuenta y se abonarán como crédito. ¿Continuar?`)) return
+    setBusy(true)
+    try {
+      const r = await api.post('/api/me/topup', { location_id: f.location_id, amount: amt })
+      alert(r.test_mode
+        ? 'Modo prueba: registrado sin cobrar ni abonar crédito.'
+        : (r.credited ? `Recarga completada. Saldo: ${fmtUsd(r.balance)}` : 'Cobrado; el crédito se abonará en unos segundos.'))
+      onSaved(); onClose()
+    } catch (err) { alert(err.message) } finally { setBusy(false) }
+  }
+  return (
+    <Modal title="Recargar desde el wallet de GHL" onClose={onClose}>
+      <form onSubmit={go} className="space-y-4">
+        <p className="text-xs text-ink2">
+          Cobra el importe del wallet de GoHighLevel de la subcuenta (meter de recarga) y lo abona como crédito interno.
+          <b className="text-warn"> Es un cobro real.</b> Para regalar saldo sin cobrar usa «Añadir crédito».
+        </p>
+        <Select label="Subcuenta" value={f.location_id} onChange={(e) => setF((s) => ({ ...s, location_id: e.target.value }))}>
+          <option value="">— elige —</option>
+          {credits.map((c) => <option key={c.location_id} value={c.location_id}>{c.location_name} · saldo {fmtUsd(c.balance)}</option>)}
+        </Select>
+        {cfg && !cfg.enabled && <p className="text-xs text-warn">Recargas desactivadas o sin tarifa de recarga: revísalo en Configuración → Recargas.</p>}
+        <Input
+          label={`Importe a recargar (USD${cfg ? `, ${cfg.min}–${cfg.max}` : ''})`} type="number" step="1"
+          min={cfg?.min ?? 1} max={cfg?.max ?? undefined}
+          value={f.amount} onChange={(e) => setF((s) => ({ ...s, amount: e.target.value }))}
+        />
+        <Button className="w-full" disabled={busy || !f.location_id || !valid}>{busy ? 'Cobrando…' : 'Cobrar y abonar'}</Button>
+      </form>
+    </Modal>
+  )
+}
+
 export default function Credits() {
   const [credits, setCredits] = useState(null)
   const [error, setError] = useState('')
   const [grant, setGrant] = useState(null) // { preset }
+  const [topup, setTopup] = useState(false)
   const [entries, setEntries] = useState(null)
 
   const load = () => api.get('/api/admin/credits').then((d) => setCredits(d.credits)).catch((e) => setError(e.message))
@@ -89,7 +136,10 @@ export default function Credits() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">Créditos</h1>
-        <Button onClick={() => setGrant({ preset: '' })}><Plus size={15} className="inline -mt-0.5 mr-1" />Añadir crédito</Button>
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={() => setTopup(true)}><Wallet size={15} className="inline -mt-0.5 mr-1" />Recargar desde wallet</Button>
+          <Button onClick={() => setGrant({ preset: '' })}><Plus size={15} className="inline -mt-0.5 mr-1" />Añadir crédito</Button>
+        </div>
       </div>
       <p className="text-sm text-ink2 -mt-3">
         Saldo interno por subcuenta. Los cobros lo consumen <b>antes</b> de tocar el wallet de GHL: ideal para promos,
@@ -112,7 +162,8 @@ export default function Credits() {
               <tr>
                 <Th>Subcuenta</Th>
                 <Th className="text-right">Saldo</Th>
-                <Th className="text-right">Concedido</Th>
+                <Th className="text-right">Concedido (neto)</Th>
+                <Th className="text-right">Recargado</Th>
                 <Th className="text-right">Consumido</Th>
                 <Th className="text-right">Reembolsado</Th>
                 <Th></Th>
@@ -127,6 +178,7 @@ export default function Credits() {
                   </Td>
                   <Td className={`text-right tabular-nums font-semibold ${c.balance > 0 ? 'text-gold' : 'text-mut'}`}>{fmtUsd(c.balance)}</Td>
                   <Td className="text-right tabular-nums text-ink2">{fmtUsd(c.granted)}</Td>
+                  <Td className="text-right tabular-nums text-ok">{fmtUsd(c.topups || 0)}</Td>
                   <Td className="text-right tabular-nums text-ink2">{fmtUsd(c.spent)}</Td>
                   <Td className="text-right tabular-nums text-mut">{fmtUsd(c.refunded || 0)}</Td>
                   <Td className="text-right whitespace-nowrap">
@@ -144,6 +196,7 @@ export default function Credits() {
 
       {grant && <GrantModal credits={credits || []} preset={grant.preset} onClose={() => setGrant(null)} onSaved={load} />}
       {entries && <EntriesModal row={entries} onClose={() => setEntries(null)} />}
+      {topup && <TopupModal credits={credits || []} onClose={() => setTopup(false)} onSaved={load} />}
     </div>
   )
 }

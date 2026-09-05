@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Store as StoreIcon, LogOut, ExternalLink, BadgeCheck, Bell } from 'lucide-react'
+import { Store as StoreIcon, LogOut, ExternalLink, BadgeCheck, Bell, Wallet } from 'lucide-react'
 import { api, fmtUsd, fmtDate } from '../api.js'
-import { Card, Th, Td, Empty, Badge } from '../components/ui.jsx'
+import { Card, Th, Td, Empty, Badge, Button } from '../components/ui.jsx'
 import { useCountUp } from '../hooks.js'
 
 const Money = ({ n }) => fmtUsd(useCountUp(n))
@@ -12,11 +12,50 @@ export default function UserPortal({ me, onLogout }) {
   const [access, setAccess] = useState(null)
   const [notices, setNotices] = useState([])
 
+  const [topupCfg, setTopupCfg] = useState(null)
+  const [locations, setLocations] = useState([])
+  const [topupLoc, setTopupLoc] = useState('')
+  const [topupAmt, setTopupAmt] = useState('')
+  const [topupBusy, setTopupBusy] = useState(false)
+
+  const loadUsage = () => api.get('/api/me/usage').then(setUsage)
+    .catch(() => setUsage({ totals: { last30: 0, all_time: 0 }, credit: 0, credit_used: { last30: 0, all_time: 0 }, by_app: [], recent: [] }))
+
   useEffect(() => {
-    api.get('/api/me/usage').then(setUsage).catch(() => setUsage({ totals: { last30: 0, all_time: 0 }, by_app: [], recent: [] }))
+    loadUsage()
     api.get('/api/me/access').then((d) => setAccess(d.access)).catch(() => setAccess([]))
     api.get('/api/me/notices').then((d) => setNotices(d.notices)).catch(() => {})
+    api.get('/api/me/topup-config').then(setTopupCfg).catch(() => {})
+    api.get('/api/me').then((d) => {
+      const locs = d.locations || []
+      setLocations(locs)
+      if (locs[0]) setTopupLoc(locs[0].location_id)
+    }).catch(() => {})
   }, [])
+
+  // Recarga: cobro REAL al wallet de GHL de la subcuenta → crédito interno al instante
+  const topupNum = Number(topupAmt)
+  const topupValid = Boolean(topupCfg) && Number.isFinite(topupNum) && topupNum >= (topupCfg?.min ?? 1) && topupNum <= (topupCfg?.max ?? Infinity)
+  const doTopup = async () => {
+    if (!topupValid) return alert(`El importe debe estar entre ${topupCfg.min} y ${topupCfg.max} USD`)
+    const amt = Math.round(topupNum * 100) / 100
+    if (!confirm(`Se cobrarán ${fmtUsd(amt)} de tu wallet de GoHighLevel y se abonarán como crédito. ¿Continuar?`)) return
+    setTopupBusy(true)
+    try {
+      const r = await api.post('/api/me/topup', { location_id: topupLoc, amount: amt })
+      if (r.test_mode) alert('Modo prueba: cargo registrado sin cobrar ni abonar crédito.')
+      else if (r.credited) alert(`¡Recarga completada! Saldo disponible: ${fmtUsd(r.balance)}`)
+      else alert('Cobro realizado; el crédito se abonará en unos segundos.')
+      setTopupAmt('')
+      loadUsage()
+    } catch (err) {
+      // 502 = cobro en verificación: el backend ya pide NO repetir; no invitar a reintentar
+      alert(err.message)
+      loadUsage()
+    } finally {
+      setTopupBusy(false)
+    }
+  }
 
   return (
     <div className="min-h-screen relative">
@@ -66,6 +105,46 @@ export default function UserPortal({ me, onLogout }) {
           <Card className="lift"><div className="text-xs text-mut">Total histórico</div><div className="text-2xl font-bold mt-1.5 tabular-nums text-gradient-gold">{usage ? <Money n={usage.totals.all_time} /> : '…'}</div></Card>
           <Card className="lift"><div className="text-xs text-mut">Apps con acceso</div><div className="text-2xl font-bold mt-1.5 tabular-nums">{access ? access.length : '…'}</div></Card>
         </div>
+
+        {topupCfg?.enabled && locations.length > 0 && (
+          <Card className="mb-6 border-gold/30">
+            <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+              <div className="flex-1">
+                <h2 className="text-sm font-semibold flex items-center gap-2"><Wallet size={15} className="text-gold" /> Recargar saldo</h2>
+                <p className="text-[11px] text-ink2 mt-1">
+                  Se cobra de tu wallet de GoHighLevel y se abona como crédito al instante. El crédito se consume antes que el wallet.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {locations.length > 1 && (
+                  <select className="bg-bg border border-border rounded-xl px-3 py-2 text-sm" value={topupLoc} onChange={(e) => setTopupLoc(e.target.value)}>
+                    {locations.map((l) => <option key={l.location_id} value={l.location_id}>{l.name}</option>)}
+                  </select>
+                )}
+                {topupCfg.presets.map((p) => (
+                  <button
+                    key={p} type="button" onClick={() => setTopupAmt(String(p))}
+                    className={`px-3 py-2 rounded-xl text-sm border transition-colors ${String(p) === topupAmt ? 'bg-gold/15 border-gold/40 text-gold' : 'border-border text-ink2 hover:text-ink'}`}
+                  >
+                    {p} $
+                  </button>
+                ))}
+                <input
+                  type="number" min={topupCfg.min} max={topupCfg.max} step="1" placeholder="Otro"
+                  value={topupAmt} onChange={(e) => setTopupAmt(e.target.value)}
+                  className="w-24 bg-bg border border-border rounded-xl px-3 py-2 text-sm outline-none focus:border-gold/60"
+                />
+                <Button disabled={topupBusy || !topupLoc || !topupValid} onClick={doTopup}>
+                  {topupBusy ? 'Cobrando…' : 'Recargar'}
+                </Button>
+              </div>
+            </div>
+            <div className="text-[11px] text-mut mt-2">
+              Entre {topupCfg.min} y {topupCfg.max} USD.
+              {usage?.topups?.all_time > 0 && <> Recargado hasta ahora: <span className="text-ok">{fmtUsd(usage.topups.all_time)}</span>.</>}
+            </div>
+          </Card>
+        )}
 
         <div className="grid lg:grid-cols-3 gap-4">
           <Card className="lg:col-span-2 overflow-x-auto">

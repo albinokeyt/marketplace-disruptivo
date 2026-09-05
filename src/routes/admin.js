@@ -5,7 +5,9 @@ import { safeEqual, generateApiKey, verifyPassword } from '../lib/crypto.js'
 import { rateLimit } from '../lib/ratelimit.js'
 import { createSession, destroySession, requireAdmin, requireAuth } from '../lib/session.js'
 import { getSetting, setSetting, getGhlConfig } from '../lib/settings.js'
+import { getTopupConfig, creditTopupOnce } from '../lib/topup.js'
 import { refundCharge, reconcileCharge, publicCharge } from '../lib/charges.js'
+import { UNKNOWN_GRACE_MS } from '../lib/reconciler.js'
 import { decryptGhlSso, ssoAuthorized } from '../lib/sso.js'
 import * as ghl from '../lib/ghl.js'
 
@@ -120,6 +122,7 @@ export default async function adminRoutes(app) {
                 COUNT(c.id)::int AS charges
          FROM apps a
          LEFT JOIN charges c ON c.app_id = a.id AND c.created_at >= now() - interval '30 days'
+         WHERE a.system = false
          GROUP BY a.id, a.name ORDER BY amount DESC LIMIT 8`),
       q(`SELECT c.*, a.name AS app_name, m.code AS meter_code,
                 COALESCE(NULLIF(k.alias,''), k.name, c.location_id) AS location_name
@@ -129,7 +132,7 @@ export default async function adminRoutes(app) {
          LEFT JOIN connections k ON k.id = c.connection_id
          ORDER BY c.created_at DESC LIMIT 12`),
       q(`SELECT
-           (SELECT COUNT(*)::int FROM apps WHERE status='active') AS apps,
+           (SELECT COUNT(*)::int FROM apps WHERE status='active' AND system = false) AS apps,
            (SELECT COUNT(*)::int FROM connections WHERE status='connected') AS connections,
            (SELECT COUNT(*)::int FROM meters WHERE active=true) AS meters`),
     ])
@@ -150,6 +153,7 @@ export default async function adminRoutes(app) {
               COALESCE(SUM(c.amount) FILTER (WHERE c.status='created' AND c.paid_with='wallet'), 0) AS amount_total,
               COALESCE(SUM(c.amount) FILTER (WHERE c.status='created' AND c.paid_with='credit'), 0) AS credit_total
        FROM apps a LEFT JOIN charges c ON c.app_id = a.id
+       WHERE a.system = false
        GROUP BY a.id ORDER BY a.created_at DESC`
     )
     return { apps: rows.map((r) => ({ ...r, key_hash: undefined, amount_total: numOr(r.amount_total, 0), credit_total: numOr(r.credit_total, 0) })) }
@@ -170,7 +174,7 @@ export default async function adminRoutes(app) {
   app.post('/api/admin/apps/:id/regenerate', guard, async (req, reply) => {
     const { key, prefix, hash } = generateApiKey()
     const { rows: [row] } = await q(
-      `UPDATE apps SET key_prefix=$1, key_hash=$2, status='active' WHERE id=$3 RETURNING *`,
+      `UPDATE apps SET key_prefix=$1, key_hash=$2, status='active' WHERE id=$3 AND system = false RETURNING *`,
       [prefix, hash, numOr(req.params.id)]
     )
     if (!row) return reply.code(404).send({ error: 'App no encontrada' })
@@ -198,7 +202,7 @@ export default async function adminRoutes(app) {
          test_mode = COALESCE($2, test_mode),
          status = COALESCE($3, status),
          allowed_location_ids = CASE WHEN $4 THEN $5::jsonb ELSE allowed_location_ids END
-       WHERE id=$6 RETURNING *`,
+       WHERE id=$6 AND system = false RETURNING *`,
       [name ?? null, typeof test_mode === 'boolean' ? test_mode : null, status ?? null, allowedSql, allowedVal, id]
     )
     if (!row) return reply.code(404).send({ error: 'App no encontrada' })
@@ -400,15 +404,54 @@ export default async function adminRoutes(app) {
   app.post('/api/admin/charges/:id/reconcile', guard, async (req, reply) => {
     const { rows: [row] } = await q('SELECT * FROM charges WHERE id=$1', [numOr(req.params.id)])
     if (!row) return reply.code(404).send({ error: 'Cargo no encontrado' })
-    if (!['unknown', 'pending'].includes(row.status)) {
+    // también una recarga DESCARTADA (failed): si GHL acabó asentando el cobro, el admin puede rescatarla
+    const reconcilable = ['unknown', 'pending'].includes(row.status) || (row.kind === 'topup' && row.status === 'failed')
+    if (!reconcilable) {
       return reply.code(409).send({ error: `Solo se reconcilian cargos sin confirmar (estado actual: ${row.status})` })
     }
     if (!row.connection_id) return reply.code(409).send({ error: 'El cargo no tiene conexión asociada' })
     try {
       const rec = await reconcileCharge(row)
-      if (rec.verified) return { result: 'cobrado', charge: publicCharge(rec.verified) }
+      if (rec.verified) {
+        // una recarga confirmada a mano abona su crédito al momento (idempotente)
+        let credited
+        if (rec.verified.kind === 'topup') credited = (await creditTopupOnce(rec.verified).catch(() => ({ credited: false }))).credited
+        return { result: 'cobrado', credited, charge: publicCharge(rec.verified) }
+      }
       if (rec.absent) return { result: 'no_encontrado', message: 'GHL no reconoce este cargo. Puede seguir asentándose; reintenta más tarde o pide a la app que reintente con el mismo event_id.' }
       return reply.code(502).send({ result: 'sin_respuesta', error: 'GHL no respondió; inténtalo de nuevo' })
+    } catch (err) {
+      return reply.code(err.statusCode || 502).send({ error: err.message })
+    }
+  })
+
+  // Recarga atascada en 'unknown' (GHL nunca confirmó y bloquea nuevas recargas de esa subcuenta):
+  // el admin la cierra a mano. Se pregunta a GHL: si existe → cobrada + crédito; si no → descartada (failed).
+  // Es una decisión EXPLÍCITA del admin (la ausencia en GHL no es autoritativa); por eso no la automatiza el reconciliador.
+  app.post('/api/admin/charges/:id/discard', guard, async (req, reply) => {
+    const { rows: [row] } = await q('SELECT * FROM charges WHERE id=$1', [numOr(req.params.id)])
+    if (!row) return reply.code(404).send({ error: 'Cargo no encontrado' })
+    if (row.kind !== 'topup' || row.status !== 'unknown') {
+      return reply.code(409).send({ error: 'Solo se descartan recargas en estado "sin confirmar"' })
+    }
+    if (!row.connection_id) return reply.code(409).send({ error: 'El cargo no tiene conexión asociada' })
+    // misma gracia que el reconciliador: recién fallado el cobro, que GHL aún no lo liste NO significa que no exista
+    const waitMs = UNKNOWN_GRACE_MS - (Date.now() - new Date(row.updated_at).getTime())
+    if (waitMs > 0) {
+      return reply.code(409).send({ error: `Espera ${Math.ceil(waitMs / 60_000)} min a que GHL asiente el cobro antes de descartar (si lo descartas antes y luego aparece, el cliente habría pagado sin crédito)` })
+    }
+    try {
+      const rec = await reconcileCharge(row)
+      if (rec.verified) {
+        const c = await creditTopupOnce(rec.verified).catch(() => ({ credited: false }))
+        return { result: 'cobrado', credited: c.credited, charge: publicCharge(rec.verified) }
+      }
+      if (rec.unreachable) return reply.code(503).send({ error: 'GHL no respondió; inténtalo de nuevo' })
+      // el reconciliador seguirá vigilando esta fila 24 h (sweepDiscarded) y el admin puede «Reconciliar» a mano
+      const { rows: [u] } = await q(
+        `UPDATE charges SET status='failed', error='Descartada por el admin: GHL no reconoce el cobro', updated_at=now()
+         WHERE id=$1 AND status='unknown' RETURNING *`, [row.id])
+      return { result: 'descartada', charge: publicCharge(u || row) }
     } catch (err) {
       return reply.code(err.statusCode || 502).send({ error: err.message })
     }
@@ -432,6 +475,7 @@ export default async function adminRoutes(app) {
       app_base_url: config.appBaseUrl,
       redirect_uri: config.appBaseUrl ? `${config.appBaseUrl}/api/oauth/callback` : '(define APP_BASE_URL)',
       custom_page_url: config.appBaseUrl ? `${config.appBaseUrl}/` : '(define APP_BASE_URL)',
+      topup: await getTopupConfig(),
     }
   })
 
@@ -461,6 +505,27 @@ export default async function adminRoutes(app) {
       await setSetting('sso_admins', {
         company_ids: norm(body.sso_admins.company_ids),
         emails: norm(body.sso_admins.emails).map((e) => e.toLowerCase()),
+      })
+    }
+    if (body.topup && typeof body.topup === 'object') {
+      const t = body.topup
+      // normalizar antes de validar: mínimo >= 1, máximo con tope absoluto, presets dentro del rango
+      const HARD_MAX = 100_000
+      const min = Math.max(1, numOr(t.min) ?? 5)
+      const maxRaw = numOr(t.max) ?? 5000
+      if (maxRaw > HARD_MAX) return reply.code(400).send({ error: `El máximo de recarga no puede superar ${HARD_MAX} USD` })
+      const max = Math.max(1, maxRaw)
+      if (min > max) return reply.code(400).send({ error: 'El mínimo de recarga no puede superar el máximo' })
+      const presets = (Array.isArray(t.presets) ? t.presets : [])
+        .map(Number).filter((n) => Number.isFinite(n) && n >= min && n <= max).slice(0, 8)
+      if (Array.isArray(t.presets) && t.presets.length && !presets.length) {
+        return reply.code(400).send({ error: `Los importes sugeridos deben estar entre ${min} y ${max} USD` })
+      }
+      await setSetting('topup', {
+        enabled: typeof t.enabled === 'boolean' ? t.enabled : true,
+        meter_code: String(t.meter_code || 'recarga-saldo').trim().toLowerCase(),
+        presets: presets.length ? presets : [10, 25, 50, 100].filter((n) => n >= min && n <= max),
+        min, max,
       })
     }
     if (typeof body.test_mode === 'boolean') await setSetting('test_mode', body.test_mode)

@@ -87,6 +87,12 @@ En la app → **Pricing → Billing Meters** → *Create Meter*:
 
 Copia el **meterId** que te genera (aparece en la página de pricing de la app).
 
+**Meter de RECARGA (para que el cliente cargue saldo desde su wallet):** crea un segundo meter
+*Custom Event (API)*, unidad `USD`, **Price Type Fixed, Default Price 1.00**. En el panel →
+**Tarifas** regístralo con código `recarga-saldo` y precio 1.00. Con eso, «Recargar saldo» en el portal
+del cliente cobra N USD de su wallet de GHL y le abona N de crédito interno. (El código es configurable en
+**Configuración → Recargas de saldo**.)
+
 > ⚠️ **Sin documentar por GHL**: no está publicado si una app **privada** puede usar billing meters.
 > Antes de montar todo encima, valida con un cargo de prueba real (paso D). Si no funciona en
 > privada, publica la app (review ~10 días hábiles).
@@ -224,6 +230,8 @@ ve **su** portal: su consumo, sus accesos y los avisos. Rol `admin` para tu equi
 | Cobro `failed` con "Falta el app_id" | Falta el **App ID** en Configuración |
 | Cobro `failed` con "no tiene companyId" | Reconecta esa subcuenta (o define `Company ID`) |
 | Cargos en `unknown` | GHL no confirmó; se reconcilian solos cada 60 s (o botón **Reconciliar**) |
+| Recarga `unknown` que bloquea nuevas recargas | Espera 3 min y pulsa **Descartar** (pregunta a GHL primero). Si GHL asienta el cobro después, se rescata solo durante 24 h o con **Reconciliar** |
+| Reembolso de recarga «en verificación» | No lo repitas: el reconciliador comprueba en GHL si ya se devolvió y lo cierra solo (>5 min) |
 | El cliente no entra por SSO | Falta el Shared Secret, o no es una **Custom Page**, o su usuario no está autorizado |
 
 ## Seguridad

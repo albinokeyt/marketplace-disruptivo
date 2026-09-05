@@ -19,7 +19,7 @@ El centro de apps del **Departamento Disruptivo**: **tienda pública** de tus ap
 - **Accesos y suscripciones**: da acceso de una subcuenta a una app o plan, por meses o indefinido, de pago/prueba/cortesía. Tus apps preguntan con `GET /api/v1/access/<locationId>`.
 - **Planes**: bundles de apps con días de prueba y duración.
 - **Usuarios y portal**: creas clientes con **login propio** (email+contraseña, aunque no estén en GHL), les asignas subcuentas, y cada uno entra a **su portal** donde ve **su** consumo (gasto por app, histórico), sus accesos activos y los avisos. Tú (admin) ves el de todos.
-- **Créditos**: saldo interno por subcuenta que tú concedes (promo, compensación, prepago). Los cobros lo consumen **antes** de tocar el wallet de GHL; si no cubre el importe, ese cobro va al wallet. Ledger auditable de cada movimiento.
+- **Créditos y recargas**: saldo interno por subcuenta. Tú puedes **regalarlo** (promo, compensación) y el cliente puede **recargarlo desde su wallet de GHL** («Recargar saldo» en su portal: se le cobra N USD del wallet vía un meter de recarga y recibe N de crédito). Los cobros consumen el crédito **antes** de tocar el wallet; si no cubre el importe, ese cobro va al wallet. Ledger auditable de cada movimiento.
 - **Avisos**: comunicados internos, banners en la tienda y en el portal del cliente.
 
 ## Créditos: cómo se contabilizan
@@ -116,6 +116,8 @@ curl -X POST https://wallet.tudominio.com/api/v1/charges \
 Estados del cargo: `pending` (en vuelo) · `created` (cobrado) · `test` · `failed` (GHL lo rechazó, reintentable) · `unknown` (sin confirmación, se reconcilia al reintentar) · `refunded`.
 
 **Reconciliación automática:** un proceso en segundo plano (cada 60 s) sana los cargos que quedan `unknown` (>3 min) o `pending` huérfanos (>10 min): consulta en GHL si el `eventId` se cobró y, **solo si lo confirma**, los promueve a `created`. Regla de oro anti-doble-cobro: el reconciliador **nunca** marca `failed` por una ausencia en GHL (la lista de GHL no es autoritativa por consistencia eventual); un cargo que sigue sin confirmarse se deja `unknown` para que lo resuelva el reintento del consumidor o el admin. Con varias réplicas solo una barre por ciclo (lock en Redis con dueño único). También puedes reconciliar a mano desde el panel → Cobros → «Reconciliar».
+
+**Recargas (kind `topup`) en el reconciliador:** (1) una recarga cobrada cuyo crédito no llegó a abonarse se abona sola (idempotente, pasados 2 min); (2) un reembolso de recarga a medias (`refunding` > 5 min) se completa: antes de repetir el DELETE en GHL se consulta si el dinero **ya** se devolvió (nunca se reembolsa dos veces ni se restituye crédito con el dinero ya devuelto); (3) una recarga `unknown` que bloquea nuevas recargas la cierra el admin con **Descartar** (solo pasados 3 min desde el fallo, y tras preguntar a GHL); si GHL acaba asentando ese cobro dentro de las 24 h siguientes, el reconciliador la rescata solo (o el admin con «Reconciliar») y abona el crédito.
 
 **Límite de peticiones:** la API pública limita a `API_RATE_PER_MIN` (def. 600) peticiones/min por API key; devuelve `429` y la cabecera `X-RateLimit-Remaining`.
 

@@ -31,7 +31,7 @@ export default async function marketplaceRoutes(app) {
     const [apps, notices] = await Promise.all([
       q(`SELECT a.*, ROUND(AVG(r.rating), 2) AS rating, COUNT(r.id) FILTER (WHERE r.visible)::int AS reviews_count
          FROM apps a LEFT JOIN reviews r ON r.app_id = a.id AND r.visible
-         WHERE a.visible = true
+         WHERE a.visible = true AND a.system = false
          GROUP BY a.id ORDER BY a.created_at DESC`),
       q(`SELECT title, body, level FROM notices WHERE active AND show_in_store ORDER BY created_at DESC LIMIT 5`),
     ])
@@ -42,7 +42,7 @@ export default async function marketplaceRoutes(app) {
     const { rows: [a] } = await q(
       `SELECT a.*, ROUND(AVG(r.rating), 2) AS rating, COUNT(r.id) FILTER (WHERE r.visible)::int AS reviews_count
        FROM apps a LEFT JOIN reviews r ON r.app_id = a.id AND r.visible
-       WHERE a.slug = $1 AND a.visible = true GROUP BY a.id`,
+       WHERE a.slug = $1 AND a.visible = true AND a.system = false GROUP BY a.id`,
       [req.params.slug]
     )
     if (!a) return reply.code(404).send({ error: 'App no encontrada' })
@@ -65,7 +65,7 @@ export default async function marketplaceRoutes(app) {
   app.patch('/api/admin/apps/:id/listing', guard, async (req, reply) => {
     const id = numOr(req.params.id)
     const b = req.body || {}
-    const { rows: [cur] } = await q('SELECT id, name, slug FROM apps WHERE id=$1', [id])
+    const { rows: [cur] } = await q('SELECT id, name, slug FROM apps WHERE id=$1 AND system = false', [id])
     if (!cur) return reply.code(404).send({ error: 'App no encontrada' })
     const media = Array.isArray(b.media) ? b.media.slice(0, 12) : undefined
     const features = Array.isArray(b.features) ? b.features.slice(0, 20).map(String) : undefined
@@ -250,15 +250,17 @@ export default async function marketplaceRoutes(app) {
               COALESCE(NULLIF(k.alias,''), k.name, k.location_id) AS location_name,
               COALESCE(c.balance, 0) AS balance,
               COALESCE(g.granted, 0) AS granted,
+              COALESCE(g.topups, 0) AS topups,
               COALESCE(g.spent, 0) AS spent,
               COALESCE(g.refunded, 0) AS refunded
        FROM connections k
        LEFT JOIN credits c ON c.location_id = k.location_id
        LEFT JOIN (
          SELECT location_id,
-                SUM(amount) FILTER (WHERE amount > 0 AND charge_id IS NULL) AS granted,
-                -SUM(amount) FILTER (WHERE amount < 0) AS spent,
-                SUM(amount) FILTER (WHERE amount > 0 AND charge_id IS NOT NULL) AS refunded
+                SUM(amount) FILTER (WHERE charge_id IS NULL) AS granted,
+                SUM(amount) FILTER (WHERE charge_id IS NOT NULL AND reason IN ('recarga','reversion_recarga')) AS topups,
+                -SUM(amount) FILTER (WHERE charge_id IS NOT NULL AND reason = 'consumo de cobro') AS spent,
+                SUM(amount) FILTER (WHERE amount > 0 AND charge_id IS NOT NULL AND reason LIKE 'reembolso%') AS refunded
          FROM credit_entries GROUP BY location_id
        ) g ON g.location_id = k.location_id
        ORDER BY COALESCE(c.balance,0) DESC, k.created_at DESC`
@@ -267,7 +269,7 @@ export default async function marketplaceRoutes(app) {
       credits: rows.map((r) => ({
         location_id: r.location_id, location_name: r.location_name,
         balance: numOr(r.balance, 0), granted: numOr(r.granted, 0), spent: numOr(r.spent, 0),
-        refunded: numOr(r.refunded, 0),
+        topups: numOr(r.topups, 0), refunded: numOr(r.refunded, 0),
       })),
     }
   })
@@ -279,6 +281,12 @@ export default async function marketplaceRoutes(app) {
     if (!locationId) return reply.code(400).send({ error: 'Falta location_id' })
     if (amount === null || amount === 0) return reply.code(400).send({ error: 'Importe inválido' })
     if (Math.abs(amount) > 1_000_000) return reply.code(400).send({ error: 'Importe fuera de rango' })
+    // motivos EXACTOS reservados a los flujos automáticos (identifican las entradas del sistema por charge_id);
+    // un texto libre que empiece igual («Recarga por transferencia») es legítimo
+    const reason = b.reason ? String(b.reason).trim() : ''
+    if (['recarga', 'reversion_recarga', 'consumo de cobro'].includes(reason.toLowerCase())) {
+      return reply.code(400).send({ error: 'Ese motivo está reservado al sistema; usa otro texto' })
+    }
     const { rows: [conn] } = await q('SELECT 1 FROM connections WHERE location_id=$1', [locationId])
     if (!conn) return reply.code(404).send({ error: 'Subcuenta no conectada' })
     try {

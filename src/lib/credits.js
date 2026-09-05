@@ -79,6 +79,66 @@ export async function trySpendCredit(chargeId, locationId, amount) {
   }
 }
 
+// Retira el crédito de una RECARGA que se va a reembolsar. Atómico e idempotente (índice único
+// parcial por charge_id con reason 'reversion_recarga'): nunca retira dos veces ni parcialmente.
+// Devuelve { ok:true } (retirado o ya retirado antes) o { ok:false, reason:'insufficient' } si el
+// cliente ya consumió parte del saldo — en ese caso NO se debe reembolsar en GHL.
+export async function reverseTopupCredit(charge) {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    // solo se puede revertir un crédito que REALMENTE se abonó (si no, se retiraría saldo ajeno del cliente)
+    const { rows: [credited] } = await client.query(
+      `SELECT amount FROM credit_entries WHERE charge_id = $1 AND reason = 'recarga' FOR UPDATE`, [charge.id])
+    if (!credited) { await client.query('ROLLBACK'); return { ok: false, reason: 'not_credited' } }
+    // se retira EXACTAMENTE lo abonado (la fila del cargo pudo alinearse con GHL después del abono)
+    const value = numOr(credited.amount, 0) ?? 0
+    if (value <= 0) { await client.query('ROLLBACK'); return { ok: true } }
+    const ins = await client.query(
+      `INSERT INTO credit_entries (location_id, amount, reason, charge_id) VALUES ($1,$2,'reversion_recarga',$3)
+       ON CONFLICT DO NOTHING`,
+      [charge.location_id, -value, charge.id]
+    )
+    if (ins.rowCount === 0) { await client.query('ROLLBACK'); return { ok: true, already: true } }
+    const { rows: [c] } = await client.query(
+      `UPDATE credits SET balance = balance - $1, updated_at = now()
+       WHERE location_id = $2 AND balance >= $1 RETURNING balance`,
+      [value, charge.location_id]
+    )
+    if (!c) { await client.query('ROLLBACK'); return { ok: false, reason: 'insufficient' } }
+    await client.query('COMMIT')
+    return { ok: true }
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {})
+    throw err
+  } finally {
+    client.release()
+  }
+}
+
+// Deshace una reversión cuyo reembolso en GHL falló: borra la entry de reversión (para que un
+// nuevo intento pueda volver a retirar) y devuelve el saldo. Idempotente.
+export async function restoreTopupCredit(charge) {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    // se devuelve exactamente lo que retiró la reversión (no charge.amount, que puede diferir)
+    const del = await client.query(
+      `DELETE FROM credit_entries WHERE charge_id = $1 AND reason = 'reversion_recarga' RETURNING amount`, [charge.id])
+    const value = del.rowCount > 0 ? Math.abs(numOr(del.rows[0].amount, 0) ?? 0) : 0
+    if (value > 0) {
+      await client.query('INSERT INTO credits (location_id) VALUES ($1) ON CONFLICT (location_id) DO NOTHING', [charge.location_id])
+      await client.query('UPDATE credits SET balance = balance + $1, updated_at = now() WHERE location_id = $2', [value, charge.location_id])
+    }
+    await client.query('COMMIT')
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {})
+    throw err
+  } finally {
+    client.release()
+  }
+}
+
 // Reembolsa un cargo pagado con crédito: marca 'refunded' Y devuelve el saldo en la MISMA
 // transacción. Si algo falla, no ocurre nada (el cargo sigue reembolsable y el reintento lo repara).
 // Devuelve la fila actualizada, o null si el cargo ya no estaba en 'created'.

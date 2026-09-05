@@ -69,6 +69,7 @@ const STATUS = {
   unknown: { label: 'Sin confirmar', cls: 'bg-warn/10 text-warn border-warn/40' },
   failed: { label: 'Fallido', cls: 'bg-bad/10 text-bad border-bad/30' },
   refunded: { label: 'Reembolsado', cls: 'bg-mut/10 text-ink2 border-border' },
+  refunding: { label: 'Reembolsando', cls: 'bg-warn/10 text-warn border-warn/30' },
   active: { label: 'Activa', cls: 'bg-ok/10 text-ok border-ok/30' },
   revoked: { label: 'Revocada', cls: 'bg-bad/10 text-bad border-bad/30' },
   connected: { label: 'Conectada', cls: 'bg-ok/10 text-ok border-ok/30' },

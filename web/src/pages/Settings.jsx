@@ -24,6 +24,8 @@ export default function Settings() {
   if (!data) return <Empty>Cargando…</Empty>
 
   const setGhl = (k) => (e) => setData((d) => ({ ...d, ghl_app: { ...d.ghl_app, [k]: e.target.value } }))
+  // recargas: los presets se editan como texto crudo y se convierten al guardar (no en cada tecla)
+  const setTopup = (k, v) => setData((d) => ({ ...d, topup: { ...(d.topup || {}), [k]: v } }))
   const setSso = (k) => (e) => setSsoText((s) => ({ ...s, [k]: e.target.value }))
   const toList = (txt) => txt.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean)
 
@@ -33,7 +35,16 @@ export default function Settings() {
     setSaved(false)
     try {
       const sso_admins = { company_ids: toList(ssoText.company_ids), emails: toList(ssoText.emails) }
-      await api.put('/api/admin/settings', { ghl_app: data.ghl_app, sso_admins, test_mode: data.test_mode })
+      const t = data.topup || {}
+      const presetsSrc = t.presets_text !== undefined ? t.presets_text : (t.presets || []).join(', ')
+      const topup = {
+        enabled: t.enabled !== false,
+        meter_code: t.meter_code || 'recarga-saldo',
+        presets: String(presetsSrc).split(/[,\s]+/).map(Number).filter((n) => n > 0),
+        min: Number(t.min) || 5,
+        max: Number(t.max) || 5000,
+      }
+      await api.put('/api/admin/settings', { ghl_app: data.ghl_app, sso_admins, test_mode: data.test_mode, topup })
       setSaved(true)
       load()
       setTimeout(() => setSaved(false), 2500)
@@ -137,6 +148,30 @@ export default function Settings() {
           <p className="text-[11px] text-mut mt-2">
             Si no hay Shared Secret ni ningún autorizado, el SSO queda desactivado (nadie entra sin contraseña) — es lo seguro por defecto.
           </p>
+        </Card>
+
+        <Card>
+          <h2 className="text-sm font-semibold mb-1">Recargas de saldo desde el wallet</h2>
+          <p className="text-xs text-ink2 mb-4 leading-relaxed">
+            El cliente pulsa «Recargar» en su portal, se le cobra el importe de su <b>wallet de GoHighLevel</b> y recibe ese
+            mismo importe como <b>crédito interno</b>. Necesita un billing meter en tu app de GHL de tipo <i>Custom Event</i>,
+            precio <b>fijo 1.00 USD por unidad</b>, registrado en Tarifas con el código de abajo.
+          </p>
+          <Toggle
+            checked={(data.topup?.enabled) !== false}
+            onChange={(v) => setTopup('enabled', v)}
+            label="Recargas activadas"
+          />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+            <Input label="Código de la tarifa de recarga" value={data.topup?.meter_code || 'recarga-saldo'} onChange={(e) => setTopup('meter_code', e.target.value)} />
+            <Input
+              label="Importes sugeridos (USD, separados por comas)"
+              value={data.topup?.presets_text !== undefined ? data.topup.presets_text : (data.topup?.presets || [10, 25, 50, 100]).join(', ')}
+              onChange={(e) => setTopup('presets_text', e.target.value)}
+            />
+            <Input label="Mínimo (USD)" type="number" min="1" value={data.topup?.min ?? 5} onChange={(e) => setTopup('min', e.target.value)} />
+            <Input label="Máximo (USD)" type="number" min="1" value={data.topup?.max ?? 5000} onChange={(e) => setTopup('max', e.target.value)} />
+          </div>
         </Card>
 
         <Card>

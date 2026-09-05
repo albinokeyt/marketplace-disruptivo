@@ -2,6 +2,9 @@ import { q, numOr } from '../db.js'
 import { requireAdmin, requireAuth } from '../lib/session.js'
 import { hashPassword, randomPassword } from '../lib/crypto.js'
 import { checkAccess } from '../lib/access.js'
+import { rateLimit } from '../lib/ratelimit.js'
+import { publicCharge } from '../lib/charges.js'
+import { createTopup, getTopupConfig } from '../lib/topup.js'
 
 const publicUser = (u) => ({
   id: u.id, email: u.email, name: u.name, role: u.role,
@@ -94,25 +97,28 @@ export default async function userRoutes(app) {
   app.get('/api/me/usage', { preHandler: requireAuth }, async (req, reply) => {
     const scope = await scopeFor(req.session)
     if (!scope.all && scope.locs.length === 0) {
-      return { totals: { last30: 0, all_time: 0 }, credit: 0, credit_used: { last30: 0, all_time: 0 }, by_app: [], recent: [] }
+      return { totals: { last30: 0, all_time: 0 }, credit: 0, credit_used: { last30: 0, all_time: 0 }, topups: { last30: 0, all_time: 0 }, by_app: [], recent: [] }
     }
     const locFilter = scope.all ? '' : 'AND c.location_id = ANY($1)'
     const params = scope.all ? [] : [scope.locs]
     const [totals, byApp, recent] = await Promise.all([
-      q(`SELECT COALESCE(SUM(amount) FILTER (WHERE created_at >= now() - interval '30 days'),0) AS last30,
-                COALESCE(SUM(amount),0) AS all_time,
-                COALESCE(SUM(amount) FILTER (WHERE paid_with='credit' AND created_at >= now() - interval '30 days'),0) AS credit_last30,
-                COALESCE(SUM(amount) FILTER (WHERE paid_with='credit'),0) AS credit_all_time
+      // consumo = solo cargos de USO (las recargas son entradas de saldo, no gasto: se reportan aparte)
+      q(`SELECT COALESCE(SUM(amount) FILTER (WHERE kind='usage' AND created_at >= now() - interval '30 days'),0) AS last30,
+                COALESCE(SUM(amount) FILTER (WHERE kind='usage'),0) AS all_time,
+                COALESCE(SUM(amount) FILTER (WHERE kind='usage' AND paid_with='credit' AND created_at >= now() - interval '30 days'),0) AS credit_last30,
+                COALESCE(SUM(amount) FILTER (WHERE kind='usage' AND paid_with='credit'),0) AS credit_all_time,
+                COALESCE(SUM(amount) FILTER (WHERE kind='topup' AND created_at >= now() - interval '30 days'),0) AS topup_last30,
+                COALESCE(SUM(amount) FILTER (WHERE kind='topup'),0) AS topup_all_time
          FROM charges c WHERE status='created' ${locFilter}`, params),
       q(`SELECT a.name AS app_name, COALESCE(SUM(c.amount) FILTER (WHERE c.status='created'),0) AS amount, COUNT(c.id)::int AS charges
          FROM charges c JOIN apps a ON a.id=c.app_id
-         WHERE c.created_at >= now() - interval '30 days' ${locFilter}
+         WHERE c.kind='usage' AND c.created_at >= now() - interval '30 days' ${locFilter}
          GROUP BY a.name ORDER BY amount DESC`, params),
       q(`SELECT c.units, c.amount, c.status, c.created_at, c.description, a.name AS app_name,
                 COALESCE(NULLIF(k.alias,''), k.name, c.location_id) AS location_name
          FROM charges c JOIN apps a ON a.id=c.app_id
          LEFT JOIN connections k ON k.id=c.connection_id
-         WHERE c.status IN ('created','test') ${locFilter}
+         WHERE c.kind='usage' AND c.status IN ('created','test') ${locFilter}
          ORDER BY c.created_at DESC LIMIT 30`, params),
     ])
     // saldo de crédito disponible (suma de sus subcuentas)
@@ -123,6 +129,7 @@ export default async function userRoutes(app) {
       totals: { last30: numOr(totals.rows[0].last30, 0), all_time: numOr(totals.rows[0].all_time, 0) },
       credit: numOr(credit.rows[0].c, 0),
       credit_used: { last30: numOr(totals.rows[0].credit_last30, 0), all_time: numOr(totals.rows[0].credit_all_time, 0) },
+      topups: { last30: numOr(totals.rows[0].topup_last30, 0), all_time: numOr(totals.rows[0].topup_all_time, 0) },
       by_app: byApp.rows.map((r) => ({ ...r, amount: numOr(r.amount, 0) })),
       recent: recent.rows.map((r) => ({ ...r, amount: numOr(r.amount, 0), units: numOr(r.units) })),
     }
@@ -152,5 +159,31 @@ export default async function userRoutes(app) {
   app.get('/api/me/notices', { preHandler: requireAuth }, async () => {
     const { rows } = await q(`SELECT title, body, level, created_at FROM notices WHERE active ORDER BY created_at DESC LIMIT 20`)
     return { notices: rows }
+  })
+
+  // ---------------- RECARGAR SALDO desde el wallet de GHL ----------------
+  // El cliente (o el admin en su nombre) paga X del wallet de GHL y recibe X de crédito interno.
+  app.get('/api/me/topup-config', { preHandler: requireAuth }, async () => {
+    const cfg = await getTopupConfig()
+    const { rows: [m] } = await q('SELECT 1 FROM meters WHERE code=$1 AND active=true', [cfg.meter_code])
+    return { enabled: Boolean(cfg.enabled && m), presets: cfg.presets, min: cfg.min, max: cfg.max, currency: 'USD' }
+  })
+
+  app.post('/api/me/topup', { preHandler: requireAuth }, async (req, reply) => {
+    const locationId = String(req.body?.location_id || '').trim()
+    if (!locationId) return reply.code(400).send({ error: 'Falta location_id' })
+    const scope = await scopeFor(req.session)
+    if (!scope.all && !scope.locs.includes(locationId)) {
+      return reply.code(403).send({ error: 'No tienes acceso a esa subcuenta' })
+    }
+    // anti-abuso: pocas recargas seguidas por sesión
+    const rl = await rateLimit(`topup:${req.session.userId}`, 5, 60)
+    if (!rl.ok) return reply.code(429).send({ error: 'Demasiadas recargas seguidas; espera un minuto' })
+    try {
+      const r = await createTopup({ locationId, amount: req.body?.amount, userId: String(req.session.userId), log: req.log })
+      return reply.code(201).send({ ...r, charge: publicCharge(r.charge) })
+    } catch (err) {
+      return reply.code(err.statusCode || 502).send({ error: err.message, charge: err.charge ? publicCharge(err.charge) : undefined })
+    }
   })
 }

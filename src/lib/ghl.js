@@ -113,7 +113,13 @@ export async function getAccessToken(connectionId) {
 }
 
 export async function apiCall(connectionId, method, path, { query, body } = {}) {
-  let token = await getAccessToken(connectionId)
+  let token
+  try {
+    token = await getAccessToken(connectionId)
+  } catch (err) {
+    err.preSend = true // nada salió hacia GHL: el llamador puede tratarlo como fallo concluyente
+    throw err
+  }
   for (let attempt = 0; attempt < 2; attempt++) {
     const url = new URL(API + path)
     if (query) {
@@ -134,7 +140,12 @@ export async function apiCall(connectionId, method, path, { query, body } = {}) 
     if (res.status === 401 && attempt === 0) {
       // token inválido antes de expirar: fuerza refresh y reintenta una vez
       await q('UPDATE connections SET token_expires_at=NULL, updated_at=now() WHERE id=$1', [connectionId])
-      token = await getAccessToken(connectionId)
+      try {
+        token = await getAccessToken(connectionId)
+      } catch (err) {
+        err.preSend = true // el 401 previo garantiza que GHL no creó nada: fallo concluyente, no ambiguo
+        throw err
+      }
       continue
     }
     const text = await res.text()
