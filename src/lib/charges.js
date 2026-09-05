@@ -56,7 +56,7 @@ export async function resolveChargeInput(appRow, body) {
   }
 
   const { rows: [conn] } = await q('SELECT * FROM connections WHERE location_id=$1', [location_id])
-  if (!conn) throw fail(404, `La subcuenta ${location_id} no está conectada a Disruptivo Wallet`)
+  if (!conn) throw fail(404, `La subcuenta ${location_id} no está conectada a Marketplace Disruptivo`)
   if (conn.status !== 'connected') throw fail(409, `La conexión de ${location_id} está en estado "${conn.status}": reconéctala desde el panel`)
 
   let pricePerUnit = numOr(meter.default_price)

@@ -38,16 +38,16 @@ Node 22 + Fastify + Postgres + Redis, panel React (Vite + Tailwind v4). Un solo 
 ## Despliegue en EasyPanel
 
 1. Crea 3 servicios en un proyecto:
-   - **disruptivo-wallet-db** → Postgres 17 (guarda la contraseña)
-   - **disruptivo-wallet-redis** → Redis 7
+   - **marketplace-db** → Postgres 17 (guarda la contraseña)
+   - **marketplace-redis** → Redis 7
    - **wallet** → App desde este repo de GitHub (build con Dockerfile)
 2. Variables de entorno del servicio **wallet** (ver `.env.example`):
 
 | Variable | Valor |
 |---|---|
 | `PORT` | `8080` |
-| `DATABASE_URL` | `postgres://postgres:<pass>@disruptivo-wallet-db:5432/disruptivo_wallet` |
-| `REDIS_URL` | `redis://disruptivo-wallet-redis:6379` |
+| `DATABASE_URL` | `postgres://<user>:<pass>@marketplace-db:5432/marketplace` |
+| `REDIS_URL` | `redis://default:<pass>@marketplace-redis:6379` |
 | `ADMIN_USER` / `ADMIN_PASS` | login del panel |
 | `APP_BASE_URL` | URL pública, p. ej. `https://wallet.escaladoacelerado.es` |
 
@@ -67,7 +67,7 @@ Los cobros al wallet **exigen una app del marketplace** (un PIT no puede crear c
    - Scopes: `charges.write`, `charges.readonly`, `oauth.readonly`, `locations.readonly`
    - Redirect URL: `https://<tu-dominio>/api/oauth/callback` (la ruta no lleva referencias a GHL; el marketplace las rechaza)
 2. En **App → Pricing → Billing Meters** crea tus meters (tipo *Custom Event (API)*): unidad, precio por defecto y, si quieres precio variable, tipo *Dynamic* con mínimo/máximo. **Ahí es donde defines tu margen.**
-3. En el panel de Disruptivo Wallet → **Configuración** pega `client_id`, `client_secret` y `app_id`.
+3. En el panel de Marketplace Disruptivo → **Configuración** pega `client_id`, `client_secret` y `app_id`.
 4. En **Tarifas** registra cada meter con su `meterId` de GHL y un código corto (p. ej. `mensajes-ia`).
 5. En **Conexiones → Conectar subcuenta** instala la app en cada subcuenta cliente (OAuth). Con eso ya se le puede cobrar.
 

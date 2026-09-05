@@ -43,7 +43,7 @@ if (existsSync(distDir)) {
     return reply.sendFile('index.html')
   })
 } else {
-  app.get('/', async () => ({ ok: true, service: 'disruptivo-wallet', panel: 'sin compilar (web/dist no existe)' }))
+  app.get('/', async () => ({ ok: true, service: 'marketplace-disruptivo', panel: 'sin compilar (web/dist no existe)' }))
 }
 
 app.setErrorHandler((err, req, reply) => {

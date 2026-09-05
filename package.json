@@ -1,5 +1,5 @@
 {
-  "name": "disruptivo-wallet",
+  "name": "marketplace-disruptivo",
   "version": "1.0.0",
   "description": "Pasarela central de cobros al wallet de GoHighLevel para las apps del Departamento Disruptivo",
   "type": "module",

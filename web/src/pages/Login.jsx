@@ -31,7 +31,7 @@ export default function Login({ onLogin }) {
           <span className="w-12 h-12 rounded-2xl bg-gold/15 border border-gold/30 grid place-items-center mb-3 glow-gold">
             <Wallet size={22} className="text-gold" />
           </span>
-          <h1 className="font-bold text-lg text-gradient-gold">Disruptivo Wallet</h1>
+          <h1 className="font-bold text-lg text-gradient-gold">Marketplace Disruptivo</h1>
           <p className="text-xs text-mut mt-1">Panel de administración</p>
         </div>
         <form onSubmit={submit} className="space-y-4">

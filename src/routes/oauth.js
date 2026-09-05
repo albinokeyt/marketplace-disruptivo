@@ -12,7 +12,7 @@ const escapeHtml = (s) =>
   String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 
 const page = (msg, ok = false) => `<!doctype html><html lang="es"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>Disruptivo Wallet</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Marketplace Disruptivo</title>
 <style>body{font-family:system-ui,sans-serif;background:#0f1117;color:#e8e6e0;display:grid;place-items:center;min-height:100vh;margin:0}
 .card{background:#181b23;border:1px solid #2a2e3a;border-radius:14px;padding:40px;max-width:440px;text-align:center}
 .icon{font-size:40px;margin-bottom:12px}b{color:#d9b45b}</style></head>
