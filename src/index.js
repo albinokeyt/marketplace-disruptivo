@@ -1,6 +1,7 @@
 import Fastify from 'fastify'
 import fastifyCookie from '@fastify/cookie'
 import fastifyStatic from '@fastify/static'
+import fastifyMultipart from '@fastify/multipart'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { existsSync } from 'node:fs'
@@ -13,10 +14,13 @@ import publicApiRoutes from './routes/publicApi.js'
 import adminRoutes from './routes/admin.js'
 import marketplaceRoutes from './routes/marketplace.js'
 import userRoutes from './routes/users.js'
+import assetRoutes, { MAX_UPLOAD_BYTES } from './routes/assets.js'
 
-const app = Fastify({ logger: true, trustProxy: true })
+const app = Fastify({ logger: true, trustProxy: true, bodyLimit: 1024 * 1024 })
 
 await app.register(fastifyCookie)
+// subidas de la vitrina (un archivo por petición, tope MAX_UPLOAD_BYTES)
+await app.register(fastifyMultipart, { limits: { files: 1, fileSize: MAX_UPLOAD_BYTES } })
 
 // salud para EasyPanel / Docker (público, sin auth)
 app.get('/healthz', async (req, reply) => {
@@ -30,6 +34,7 @@ await app.register(oauthRoutes)
 await app.register(adminRoutes)
 await app.register(marketplaceRoutes)
 await app.register(userRoutes)
+await app.register(assetRoutes)
 await app.register(publicApiRoutes, { prefix: '' })
 
 // panel React compilado (web/dist)

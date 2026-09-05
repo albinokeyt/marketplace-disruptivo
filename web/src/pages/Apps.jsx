@@ -21,6 +21,24 @@ function ListingModal({ app, onClose, onSaved }) {
   const setMedia = (i, k, v) => setF((s) => ({ ...s, media: s.media.map((m, j) => j === i ? { ...m, [k]: v } : m) }))
   const addMedia = () => setF((s) => ({ ...s, media: [...s.media, { type: 'image', url: '', caption: '' }] }))
   const rmMedia = (i) => setF((s) => ({ ...s, media: s.media.filter((_, j) => j !== i) }))
+  const [uploading, setUploading] = useState(false)
+
+  // sube fotos/vídeos al servidor (se guardan en la BD y se sirven en /uploads/…) y las añade a la vitrina
+  const upload = async (e) => {
+    const files = [...(e.target.files || [])]
+    e.target.value = ''
+    if (!files.length) return
+    setUploading(true)
+    try {
+      for (const file of files) {
+        const fd = new FormData(); fd.append('file', file)
+        const res = await fetch('/api/admin/uploads', { method: 'POST', body: fd, credentials: 'same-origin' })
+        const d = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(d.error || `Error ${res.status}`)
+        setF((s) => ({ ...s, media: [...s.media, { type: d.mime.startsWith('video/') ? 'video' : 'image', url: d.url, caption: '' }] }))
+      }
+    } catch (err) { alert(err.message) } finally { setUploading(false) }
+  }
 
   const save = async () => {
     setBusy(true)
@@ -69,11 +87,20 @@ function ListingModal({ app, onClose, onSaved }) {
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs text-ink2">Fotos y vídeos</span>
-            <button className="text-xs text-gold" onClick={addMedia}><Plus size={12} className="inline" /> añadir</button>
+            <div className="flex gap-3">
+              <label className="text-xs text-gold cursor-pointer">
+                {uploading ? 'Subiendo…' : 'subir archivo'}
+                <input type="file" className="hidden" multiple accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm" onChange={upload} disabled={uploading} />
+              </label>
+              <button className="text-xs text-gold" onClick={addMedia}><Plus size={12} className="inline" /> por URL</button>
+            </div>
           </div>
           <div className="space-y-2">
             {f.media.map((m, i) => (
               <div key={i} className="flex gap-2 items-center">
+                {m.type === 'image' && m.url
+                  ? <img src={m.url} alt="" className="w-10 h-10 rounded-lg object-cover border border-border shrink-0" />
+                  : <div className="w-10 h-10 rounded-lg border border-border shrink-0 grid place-items-center text-[10px] text-mut">{m.type === 'video' ? 'vídeo' : '—'}</div>}
                 <select className="bg-bg border border-border rounded-lg px-2 py-2 text-xs" value={m.type} onChange={(e) => setMedia(i, 'type', e.target.value)}>
                   <option value="image">Imagen</option><option value="video">Vídeo</option>
                 </select>
