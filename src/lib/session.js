@@ -6,11 +6,17 @@ import { q } from '../db.js'
 const COOKIE = 'dw_session'
 const TTL = 60 * 60 * 24 * 7
 
-// La sesión guarda { userId, role } ('root' = super-admin por env; 'sso:<email>' = admin por SSO).
+// La sesión guarda { userId, role } ('root' = super-admin por env; 'sso:<id>' = identidad certificada por GHL).
+// Para un CLIENTE que entra por SSO desde su subcuenta se guarda además { locs:[locationId], name, email }:
+// su alcance vive en la sesión (no hay fila en users) y se revalida contra connections en cada petición.
 // crossSite=true para sesiones creadas dentro del iframe de GHL (SSO): SameSite=None; Secure; Partitioned.
-export async function createSession(req, reply, { userId, role, crossSite = false } = {}) {
+export async function createSession(req, reply, { userId, role, crossSite = false, locs, name, email } = {}) {
   const token = randomBytes(32).toString('hex')
-  await redis.set(`sess:${token}`, JSON.stringify({ userId, role }), 'EX', TTL)
+  const data = { userId, role }
+  if (Array.isArray(locs)) data.locs = locs.map(String).filter(Boolean).slice(0, 50)
+  if (name) data.name = String(name).slice(0, 120)
+  if (email) data.email = String(email).trim().toLowerCase().slice(0, 200)
+  await redis.set(`sess:${token}`, JSON.stringify(data), 'EX', TTL)
   reply.setCookie(COOKIE, token, {
     path: '/',
     httpOnly: true,
@@ -44,7 +50,8 @@ export async function getSession(req) {
 
 // Resuelve la sesión a la identidad EFECTIVA: los usuarios de tabla se REVALIDAN contra la BD en
 // cada petición (rol/active pueden haber cambiado desde el login → degradar/desactivar/borrar surte
-// efecto al instante, no en 7 días). 'root' (env) y 'sso:' (admin de agencia) se confían sin BD.
+// efecto al instante, no en 7 días). 'root' (env) y 'sso:' (identidad certificada por GHL) se confían
+// sin BD; el alcance de un cliente 'sso:' (locs) lo revalida scopeFor contra las conexiones.
 export async function resolveSession(req) {
   const s = await getSession(req)
   if (!s) return null

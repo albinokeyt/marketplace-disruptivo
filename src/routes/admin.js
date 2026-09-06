@@ -68,12 +68,28 @@ export default async function adminRoutes(app) {
       return reply.code(401).send({ error: 'No se pudo verificar la identidad de GHL' })
     }
     const admins = (await getSetting('sso_admins')) || {}
-    if (!ssoAuthorized(identity, admins, cfg)) {
-      return reply.code(403).send({ error: 'Tu usuario de GHL no está autorizado para este panel' })
-    }
     // sesión cross-site: la cookie viaja en el iframe de GHL (SameSite=None; Secure; Partitioned)
-    await createSession(req, reply, { userId: `sso:${String(identity.email || '').toLowerCase()}`, role: 'admin', crossSite: true })
-    return { ok: true }
+    if (ssoAuthorized(identity, admins, cfg)) {
+      // dueño/admin de la agencia → panel completo
+      await createSession(req, reply, { userId: `sso:${String(identity.email || '').toLowerCase()}`, role: 'admin', crossSite: true })
+      return { ok: true, role: 'admin' }
+    }
+    // CLIENTE: cualquier otro usuario que abra la Custom Page desde una subcuenta con la app instalada
+    // entra a SU portal (saldo, recargas, consumo, accesos) limitado a esa subcuenta. La identidad y la
+    // subcuenta activa vienen cifradas por GHL, así que no se pueden falsificar.
+    const loc = String(identity.activeLocation || identity.locationId || '').trim()
+    if (!loc) {
+      return reply.code(403).send({ error: 'Abre Marketplace Disruptivo desde el menú de una subcuenta (no desde la vista de agencia)' })
+    }
+    const { rows: [conn] } = await q('SELECT location_id FROM connections WHERE location_id=$1', [loc])
+    if (!conn) return reply.code(403).send({ error: 'Esta subcuenta aún no tiene instalada la app Marketplace Disruptivo' })
+    const uid = String(identity.userId || identity.email || '').trim().toLowerCase()
+    if (!uid) return reply.code(401).send({ error: 'No se pudo verificar la identidad de GHL' })
+    await createSession(req, reply, {
+      userId: `sso:${uid}`, role: 'user', crossSite: true,
+      locs: [loc], name: identity.userName || identity.name || null, email: identity.email || null,
+    })
+    return { ok: true, role: 'user' }
   })
 
   app.post('/api/admin/logout', async (req, reply) => {
@@ -87,6 +103,8 @@ export default async function adminRoutes(app) {
       const email = s.userId === 'root' ? config.adminUser : (String(s.userId).startsWith('sso:') ? String(s.userId).slice(4) : null)
       return { ok: true, role: 'admin', email }
     }
+    // cliente por SSO: sus datos viven en la sesión (no hay fila en users)
+    if (String(s.userId).startsWith('sso:')) return { ok: true, role: 'user', email: s.email || null, name: s.name || null, sso: true }
     const { rows: [u] } = await q('SELECT email, name, role FROM users WHERE id=$1 AND active=true', [numOr(s.userId)])
     if (!u) return reply.code(401).send({ error: 'No autorizado' })
     return { ok: true, role: 'user', email: u.email, name: u.name }

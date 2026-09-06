@@ -78,6 +78,14 @@ export default async function userRoutes(app) {
   // Devuelve las location_ids del solicitante. 'root'/'sso' (admin) ven TODAS.
   async function scopeFor(session) {
     if (session.role === 'admin') return { all: true, locs: [] }
+    // cliente entrado por SSO desde su subcuenta de GHL: solo ve ESA subcuenta, y solo mientras la app
+    // siga instalada (conexión existente) — si se desinstala, deja de ver datos aunque la sesión viva
+    if (String(session.userId || '').startsWith('sso:')) {
+      const locs = Array.isArray(session.locs) ? session.locs.map(String).filter(Boolean) : []
+      if (!locs.length) return { all: false, locs: [] }
+      const { rows } = await q('SELECT location_id FROM connections WHERE location_id = ANY($1)', [locs])
+      return { all: false, locs: rows.map((r) => r.location_id) }
+    }
     const { rows: [u] } = await q('SELECT location_ids, active FROM users WHERE id=$1', [numOr(session.userId)])
     if (!u || !u.active) return { all: false, locs: [] }
     return { all: false, locs: Array.isArray(u.location_ids) ? u.location_ids : [] }
