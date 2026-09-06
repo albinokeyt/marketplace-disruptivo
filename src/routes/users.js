@@ -75,9 +75,16 @@ export default async function userRoutes(app) {
   })
 
   // ---------------- PORTAL DEL USUARIO (cualquier sesión) ----------------
-  // Devuelve las location_ids del solicitante. 'root'/'sso' (admin) ven TODAS.
-  async function scopeFor(session) {
-    if (session.role === 'admin') return { all: true, locs: [] }
+  // Devuelve las location_ids del solicitante. 'root'/'sso' (admin) ven TODAS — salvo que el admin pida
+  // «ver como cliente» una subcuenta concreta (?location_id=): entonces queda limitado a ella y en solo
+  // lectura (preview), para ver exactamente lo que ve ese cliente sin poder cobrarle por error.
+  async function scopeFor(session, previewLoc = null) {
+    if (session.role === 'admin') {
+      const loc = previewLoc ? String(previewLoc).trim() : ''
+      if (!loc) return { all: true, locs: [] }
+      const { rows: [k] } = await q('SELECT location_id FROM connections WHERE location_id=$1', [loc])
+      return { all: false, locs: k ? [k.location_id] : [], preview: true }
+    }
     // cliente entrado por SSO desde su subcuenta de GHL: solo ve ESA subcuenta, y solo mientras la app
     // siga instalada (conexión existente) — si se desinstala, deja de ver datos aunque la sesión viva
     if (String(session.userId || '').startsWith('sso:')) {
@@ -91,19 +98,22 @@ export default async function userRoutes(app) {
     return { all: false, locs: Array.isArray(u.location_ids) ? u.location_ids : [] }
   }
 
+  // solo un admin puede «ver como cliente»; para cualquier otro la query se ignora
+  const previewOf = (req) => (req.session?.role === 'admin' && req.query?.location_id ? String(req.query.location_id) : null)
+
   // Mi perfil + mis subcuentas
   app.get('/api/me', { preHandler: requireAuth }, async (req) => {
-    const scope = await scopeFor(req.session)
+    const scope = await scopeFor(req.session, previewOf(req))
     const locs = scope.all ? [] : scope.locs
     const { rows } = locs.length
       ? await q(`SELECT location_id, COALESCE(NULLIF(alias,''), name, location_id) AS name FROM connections WHERE location_id = ANY($1)`, [locs])
       : { rows: [] }
-    return { role: req.session.role, locations: rows }
+    return { role: req.session.role, locations: rows, preview: Boolean(scope.preview) }
   })
 
   // Mi gasto: solo mis subcuentas (un usuario nunca ve el de otro)
   app.get('/api/me/usage', { preHandler: requireAuth }, async (req, reply) => {
-    const scope = await scopeFor(req.session)
+    const scope = await scopeFor(req.session, previewOf(req))
     if (!scope.all && scope.locs.length === 0) {
       return { totals: { last30: 0, all_time: 0 }, credit: 0, credit_used: { last30: 0, all_time: 0 }, topups: { last30: 0, all_time: 0 }, by_app: [], recent: [] }
     }
@@ -145,7 +155,7 @@ export default async function userRoutes(app) {
 
   // Mis accesos: qué apps/planes tengo y hasta cuándo (por subcuenta)
   app.get('/api/me/access', { preHandler: requireAuth }, async (req) => {
-    const scope = await scopeFor(req.session)
+    const scope = await scopeFor(req.session, previewOf(req))
     if (!scope.all && scope.locs.length === 0) return { access: [] }
     const where = scope.all ? '' : 'WHERE s.location_id = ANY($1)'
     const params = scope.all ? [] : [scope.locs]
@@ -180,7 +190,10 @@ export default async function userRoutes(app) {
   app.post('/api/me/topup', { preHandler: requireAuth }, async (req, reply) => {
     const locationId = String(req.body?.location_id || '').trim()
     if (!locationId) return reply.code(400).send({ error: 'Falta location_id' })
-    const scope = await scopeFor(req.session)
+    const scope = await scopeFor(req.session, previewOf(req))
+    if (scope.preview) {
+      return reply.code(403).send({ error: '«Ver como cliente» es solo lectura: para recargar en nombre del cliente usa Créditos → Recargar desde wallet' })
+    }
     if (!scope.all && !scope.locs.includes(locationId)) {
       return reply.code(403).send({ error: 'No tienes acceso a esa subcuenta' })
     }

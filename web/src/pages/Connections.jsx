@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Plug, RefreshCw, Wallet } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Plug, RefreshCw, Wallet, Eye } from 'lucide-react'
 import { api, fmtUsd, fmtDate } from '../api.js'
 import { Card, Button, Badge, Th, Td, Empty, Toggle } from '../components/ui.jsx'
 
@@ -107,6 +108,13 @@ export default function Connections() {
                   <Td><Toggle checked={c.test_mode} onChange={(v) => toggleTest(c, v)} /></Td>
                   <Td><Badge status={c.status} /></Td>
                   <Td className="text-right whitespace-nowrap">
+                    <Link
+                      to={`/como-cliente/${encodeURIComponent(c.location_id)}`}
+                      className="text-xs text-gold/90 hover:text-gold mr-3 inline-flex items-center gap-1"
+                      title="Ver el portal exactamente como lo ve esta subcuenta (solo lectura)"
+                    >
+                      <Eye size={13} /> Ver como cliente
+                    </Link>
                     <button
                       className="text-xs text-ink2 hover:text-gold mr-3"
                       title="Releer el nombre desde GHL"

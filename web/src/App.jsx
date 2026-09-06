@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom'
+import { Routes, Route, NavLink, Navigate, useLocation, useParams, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Boxes, Package, BadgeCheck, Receipt, Gauge, Plug, Bell,
   Users2, Coins, Settings as SettingsIcon, LogOut, Store as StoreIcon, ExternalLink,
@@ -50,6 +50,19 @@ export default function App() {
   return <AdminApp location={location} />
 }
 
+function ClientPreview({ me }) {
+  const { locationId } = useParams()
+  const navigate = useNavigate()
+  return (
+    <UserPortal
+      me={me}
+      asLocation={locationId}
+      onPickLocation={(loc) => navigate(`/como-cliente/${encodeURIComponent(loc)}`)}
+      onLogout={() => navigate('/conexiones')}
+    />
+  )
+}
+
 function AdminApp({ location }) {
   const [me, setMe] = useState(null) // null = cargando · false = sin sesión · { role, email, name }
 
@@ -85,6 +98,15 @@ function AdminApp({ location }) {
   }
   if (!me) return <Login onLogin={async () => setMe((await loadMe()) || false)} />
   if (me.role === 'user') return <UserPortal me={me} onLogout={logout} />
+  // admin «viendo como cliente»: el portal a pantalla completa, tal cual lo ve esa subcuenta
+  if (location.pathname.startsWith('/como-cliente')) {
+    return (
+      <Routes location={location}>
+        <Route path="/como-cliente/:locationId" element={<ClientPreview me={me} />} />
+        <Route path="*" element={<Navigate to="/conexiones" replace />} />
+      </Routes>
+    )
+  }
 
   return (
     <div className="min-h-screen relative">

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Store as StoreIcon, LogOut, ExternalLink, BadgeCheck, Bell, Wallet } from 'lucide-react'
+import { Store as StoreIcon, LogOut, ExternalLink, BadgeCheck, Bell, Wallet, Eye, ArrowLeft } from 'lucide-react'
 import { api, fmtUsd, fmtDate } from '../api.js'
 import { Card, Th, Td, Empty, Badge, Button } from '../components/ui.jsx'
 import { useCountUp } from '../hooks.js'
@@ -7,7 +7,9 @@ import { useCountUp } from '../hooks.js'
 const Money = ({ n }) => fmtUsd(useCountUp(n))
 const STATUS_BADGE = { active: 'active', trial: 'test', comped: 'connected' }
 
-export default function UserPortal({ me, onLogout }) {
+// asLocation: el ADMIN ve el portal exactamente como lo ve el cliente de esa subcuenta (solo lectura).
+// onPickLocation: en ese modo, cambiar de subcuenta desde la barra superior.
+export default function UserPortal({ me, onLogout, asLocation = null, onPickLocation = null }) {
   const [usage, setUsage] = useState(null)
   const [access, setAccess] = useState(null)
   const [notices, setNotices] = useState([])
@@ -17,21 +19,29 @@ export default function UserPortal({ me, onLogout }) {
   const [topupLoc, setTopupLoc] = useState('')
   const [topupAmt, setTopupAmt] = useState('')
   const [topupBusy, setTopupBusy] = useState(false)
+  const [allConnections, setAllConnections] = useState([])
 
-  const loadUsage = () => api.get('/api/me/usage').then(setUsage)
+  const preview = Boolean(asLocation)
+  const qs = preview ? `?location_id=${encodeURIComponent(asLocation)}` : ''
+
+  const loadUsage = () => api.get(`/api/me/usage${qs}`).then(setUsage)
     .catch(() => setUsage({ totals: { last30: 0, all_time: 0 }, credit: 0, credit_used: { last30: 0, all_time: 0 }, by_app: [], recent: [] }))
 
   useEffect(() => {
+    setUsage(null); setAccess(null)
     loadUsage()
-    api.get('/api/me/access').then((d) => setAccess(d.access)).catch(() => setAccess([]))
+    api.get(`/api/me/access${qs}`).then((d) => setAccess(d.access)).catch(() => setAccess([]))
     api.get('/api/me/notices').then((d) => setNotices(d.notices)).catch(() => {})
     api.get('/api/me/topup-config').then(setTopupCfg).catch(() => {})
-    api.get('/api/me').then((d) => {
+    api.get(`/api/me${qs}`).then((d) => {
       const locs = d.locations || []
       setLocations(locs)
       if (locs[0]) setTopupLoc(locs[0].location_id)
     }).catch(() => {})
-  }, [])
+    if (preview) api.get('/api/admin/connections').then((d) => setAllConnections(d.connections || [])).catch(() => {})
+  }, [asLocation])
+
+  const previewName = locations[0]?.name || asLocation
 
   // Recarga: cobro REAL al wallet de GHL de la subcuenta → crédito interno al instante
   const topupNum = Number(topupAmt)
@@ -60,6 +70,23 @@ export default function UserPortal({ me, onLogout }) {
   return (
     <div className="min-h-screen relative">
       <div className="app-bg" aria-hidden="true" />
+      {preview && (
+        <div className="relative z-20 border-b border-gold/30 bg-gold/10 backdrop-blur-sm">
+          <div className="max-w-5xl mx-auto px-5 py-2.5 flex flex-wrap items-center gap-3 text-sm">
+            <span className="inline-flex items-center gap-1.5 text-gold font-semibold"><Eye size={15} /> Vista como cliente</span>
+            <span className="text-ink2">— estás viendo el portal tal y como lo ve la subcuenta</span>
+            {onPickLocation && allConnections.length > 0
+              ? (
+                <select className="bg-bg border border-gold/40 rounded-lg px-2 py-1 text-sm" value={asLocation} onChange={(e) => onPickLocation(e.target.value)}>
+                  {allConnections.map((c) => <option key={c.location_id} value={c.location_id}>{c.alias || c.name || c.location_id}</option>)}
+                </select>
+              )
+              : <b>{previewName}</b>}
+            <span className="text-[11px] text-mut">Solo lectura: aquí no se puede recargar ni cobrar.</span>
+            <button onClick={onLogout} className="ml-auto inline-flex items-center gap-1.5 text-gold hover:text-ink"><ArrowLeft size={14} /> Volver al panel</button>
+          </div>
+        </div>
+      )}
       <div className="relative z-10 max-w-5xl mx-auto px-5 py-8">
         <header className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-2.5">
@@ -68,12 +95,12 @@ export default function UserPortal({ me, onLogout }) {
             </span>
             <div>
               <div className="font-bold text-sm text-gradient-gold leading-tight">Marketplace Disruptivo</div>
-              <div className="text-[11px] text-mut leading-tight">Hola{me?.name ? `, ${me.name}` : ''}</div>
+              <div className="text-[11px] text-mut leading-tight">{preview ? `Portal de ${previewName || 'la subcuenta'}` : `Hola${me?.name ? `, ${me.name}` : ''}`}</div>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <a href="/tienda" target="_blank" rel="noreferrer" className="text-sm text-gold/90 hover:text-gold inline-flex items-center gap-1.5"><ExternalLink size={14} /> Tienda</a>
-            <button onClick={onLogout} className="text-sm text-ink2 hover:text-ink inline-flex items-center gap-1.5"><LogOut size={14} /> Salir</button>
+            {!preview && <button onClick={onLogout} className="text-sm text-ink2 hover:text-ink inline-flex items-center gap-1.5"><LogOut size={14} /> Salir</button>}
           </div>
         </header>
 
@@ -134,7 +161,10 @@ export default function UserPortal({ me, onLogout }) {
                   value={topupAmt} onChange={(e) => setTopupAmt(e.target.value)}
                   className="w-24 bg-bg border border-border rounded-xl px-3 py-2 text-sm outline-none focus:border-gold/60"
                 />
-                <Button disabled={topupBusy || !topupLoc || !topupValid} onClick={doTopup}>
+                <Button
+                  disabled={preview || topupBusy || !topupLoc || !topupValid} onClick={doTopup}
+                  title={preview ? 'Solo lectura en «Ver como cliente»: para recargar en su nombre usa Créditos → Recargar desde wallet' : undefined}
+                >
                   {topupBusy ? 'Cobrando…' : 'Recargar'}
                 </Button>
               </div>
