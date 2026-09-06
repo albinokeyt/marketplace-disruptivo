@@ -31,7 +31,10 @@ export async function createSession(req, reply, { userId, role, crossSite = fals
 export async function destroySession(req, reply) {
   const token = req.cookies?.[COOKIE]
   if (token) await redis.del(`sess:${token}`)
+  // la cookie de una sesión SSO (iframe de GHL) es particionada: el navegador solo la borra si se
+  // repiten sus atributos; se limpian ambas variantes para que «Salir» funcione dentro y fuera de GHL
   reply.clearCookie(COOKIE, { path: '/' })
+  reply.clearCookie(COOKIE, { path: '/', sameSite: 'none', secure: true, partitioned: true })
 }
 
 // Devuelve { userId, role } o null.
