@@ -77,7 +77,12 @@ Los cobros al wallet **exigen una app del marketplace** (un PIT no puede crear c
 
 El panel puede abrirse **embebido dentro de GHL** y autenticar al usuario **automáticamente**, sin pantalla de login. GHL entrega la identidad del usuario **cifrada** (no viaja por la URL, no se puede falsificar) y el panel la canjea por sesión.
 
-**Por qué es seguro (y por qué solo por Custom Page):** este panel maneja dinero, así que el auto-login **solo** confía en el contexto cifrado que GHL envía por `postMessage` desde una **Custom Page** de la app del marketplace. Los *Custom Menu Link* pasan la identidad como parámetros de URL **falsificables**, así que **no** conceden acceso por sí solos. Además, solo entra quien esté **autorizado**; el resto ve la pantalla de login normal.
+**Por qué es seguro (y por qué solo por Custom Page):** este panel maneja dinero, así que el auto-login **solo** confía en el contexto cifrado que GHL envía por `postMessage` desde una **Custom Page** de la app del marketplace. Los *Custom Menu Link* pasan la identidad como parámetros de URL **falsificables**, así que **no** conceden acceso por sí solos.
+
+**Quién ve qué al abrir la Custom Page:**
+- **Tú / admins de tu agencia** (Company ID o correos autorizados en Configuración): el **panel de administración** completo.
+- **Tus clientes** (cualquier usuario de una subcuenta que tenga la app instalada): **su portal** — saldo, «Recargar saldo» desde su wallet, consumo por app, accesos y avisos — limitado a **esa** subcuenta. No hace falta crearles usuario ni contraseña; la identidad y la subcuenta vienen cifradas por GHL. Si la app se desinstala de la subcuenta, dejan de ver datos.
+- Quien abra la página desde la vista de agencia sin subcuenta activa recibe un aviso para abrirla desde una subcuenta.
 
 **Configuración (una vez):**
 1. En tu app del marketplace → **Advanced Settings → SSO**, genera el **Shared Secret**.
