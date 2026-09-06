@@ -180,11 +180,15 @@ export default async function publicApiRoutes(app) {
     const consumer = req.consumerApp
     const id = numOr(req.params.id)
     if (id === null) return reply.code(400).send({ error: 'id inválido' })
-    const { rows: [row] } = await q('SELECT * FROM charges WHERE id=$1 AND app_id=$2', [id, consumer.id])
+    // se arrastra meter_code para que la respuesta traiga el mismo campo "meter" que el resto de endpoints
+    const { rows: [row] } = await q(
+      `SELECT c.*, m.code AS meter_code FROM charges c
+       LEFT JOIN meters m ON m.id = c.meter_id
+       WHERE c.id=$1 AND c.app_id=$2`, [id, consumer.id])
     if (!row) return reply.code(404).send({ error: 'Cargo no encontrado' })
     try {
       const updated = await refundCharge(row)
-      return { charge: publicCharge(updated) }
+      return { charge: publicCharge({ meter_code: row.meter_code, ...updated }) }
     } catch (err) {
       return reply.code(err.statusCode || 502).send({ error: err.message })
     }
