@@ -1,0 +1,1030 @@
+<title>API Marketplace Disruptivo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<style>
+  :root {
+    --ground: #faf8f4;
+    --panel: #ffffff;
+    --panel-2: #f3f0e8;
+    --ink: #1c1a15;
+    --ink-2: #4f4a3f;
+    --muted: #867f70;
+    --line: #e3ded2;
+    --line-strong: #cec7b6;
+    --gold: #8a6a12;
+    --gold-bright: #b8912c;
+    --gold-wash: #f6efdb;
+    --ok: #17693f;
+    --ok-wash: #e4f1e9;
+    --warn: #8a5a00;
+    --warn-wash: #fbefd9;
+    --bad: #a52318;
+    --bad-wash: #fbe8e5;
+    --code-bg: #16140f;
+    --code-panel: #211e17;
+    --code-ink: #ebe5d6;
+    --code-dim: #8e8674;
+    --code-str: #d9b45b;
+    --code-key: #9fc2a6;
+    --shadow: 0 1px 2px rgba(28, 26, 21, .05), 0 8px 24px -16px rgba(28, 26, 21, .25);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #14120e;
+      --panel: #1c1a15;
+      --panel-2: #24211a;
+      --ink: #f0ece1;
+      --ink-2: #bdb6a6;
+      --muted: #8b8474;
+      --line: #322e25;
+      --line-strong: #46402f;
+      --gold: #d9b45b;
+      --gold-bright: #f3d27a;
+      --gold-wash: #2a2415;
+      --ok: #6ec99a;
+      --ok-wash: #17301f;
+      --warn: #e0b25f;
+      --warn-wash: #322610;
+      --bad: #f0918a;
+      --bad-wash: #3a1a17;
+      --code-bg: #0d0c09;
+      --code-panel: #171510;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .8);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #14120e;
+    --panel: #1c1a15;
+    --panel-2: #24211a;
+    --ink: #f0ece1;
+    --ink-2: #bdb6a6;
+    --muted: #8b8474;
+    --line: #322e25;
+    --line-strong: #46402f;
+    --gold: #d9b45b;
+    --gold-bright: #f3d27a;
+    --gold-wash: #2a2415;
+    --ok: #6ec99a;
+    --ok-wash: #17301f;
+    --warn: #e0b25f;
+    --warn-wash: #322610;
+    --bad: #f0918a;
+    --bad-wash: #3a1a17;
+    --code-bg: #0d0c09;
+    --code-panel: #171510;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .8);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 28px 96px;
+  }
+
+  /* ---------- cabecera ---------- */
+  .masthead {
+    border-bottom: 1px solid var(--line);
+    padding: 44px 0 32px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+  }
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11.5px;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin: 0 0 10px;
+  }
+  h1 {
+    font-family: "Familjen Grotesk", ui-sans-serif, system-ui, sans-serif;
+    font-weight: 700;
+    font-size: clamp(30px, 4.4vw, 46px);
+    line-height: 1.06;
+    letter-spacing: -.02em;
+    margin: 0 0 12px;
+    text-wrap: balance;
+  }
+  .lede {
+    margin: 0;
+    max-width: 60ch;
+    color: var(--ink-2);
+    font-size: 17px;
+  }
+  .base-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+    box-shadow: var(--shadow);
+    min-width: 280px;
+  }
+  .base-card .k {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: block;
+    margin-bottom: 6px;
+  }
+  .base-card code {
+    font-size: 13px;
+    color: var(--ink);
+    word-break: break-all;
+  }
+  .base-card + .base-card { margin-top: 10px; }
+
+  /* ---------- rejilla ---------- */
+  .cols {
+    display: grid;
+    grid-template-columns: 190px minmax(0, 1fr);
+    gap: 56px;
+    align-items: start;
+    padding-top: 44px;
+  }
+  @media (max-width: 900px) {
+    .cols { grid-template-columns: minmax(0, 1fr); gap: 0; }
+    nav.toc { display: none; }
+  }
+
+  nav.toc {
+    position: sticky;
+    top: 28px;
+    font-size: 13.5px;
+  }
+  nav.toc ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; counter-reset: toc; }
+  nav.toc a {
+    display: flex;
+    gap: 10px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    color: var(--ink-2);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+  }
+  nav.toc a::before {
+    counter-increment: toc;
+    content: counter(toc);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--muted);
+    padding-top: 2px;
+  }
+  nav.toc a:hover { color: var(--gold); background: var(--gold-wash); }
+  nav.toc a:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+
+  main { max-width: 74ch; }
+
+  section { margin-bottom: 60px; scroll-margin-top: 24px; }
+  h2 {
+    font-family: "Familjen Grotesk", ui-sans-serif, system-ui, sans-serif;
+    font-weight: 600;
+    font-size: 25px;
+    letter-spacing: -.015em;
+    margin: 0 0 6px;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    text-wrap: balance;
+  }
+  h2 .num {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--gold);
+    letter-spacing: .1em;
+  }
+  h3 {
+    font-family: "Familjen Grotesk", ui-sans-serif, system-ui, sans-serif;
+    font-weight: 600;
+    font-size: 16.5px;
+    margin: 30px 0 8px;
+    letter-spacing: -.005em;
+  }
+  .sub { color: var(--muted); margin: 0 0 20px; font-size: 15px; max-width: 62ch; }
+  p { margin: 0 0 14px; max-width: 68ch; }
+  a { color: var(--gold); }
+  strong { font-weight: 600; }
+
+  code {
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: .88em;
+  }
+  p code, li code, td code, th code {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: .08em .34em;
+    white-space: nowrap;
+  }
+
+  /* ---------- bloques de código (terminal, un solo mundo) ---------- */
+  .code {
+    position: relative;
+    background: var(--code-bg);
+    border: 1px solid var(--code-panel);
+    border-radius: 10px;
+    margin: 0 0 18px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .code-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 14px;
+    background: var(--code-panel);
+    border-bottom: 1px solid rgba(255, 255, 255, .06);
+  }
+  .code-head span {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--code-dim);
+  }
+  .code pre {
+    margin: 0;
+    padding: 16px 18px;
+    overflow-x: auto;
+    color: var(--code-ink);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 13px;
+    line-height: 1.7;
+    tab-size: 2;
+  }
+  .code .s { color: var(--code-str); }
+  .code .c { color: var(--code-dim); font-style: italic; }
+  .code .k { color: var(--code-key); }
+  button.copy {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--code-dim);
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, .14);
+    border-radius: 5px;
+    padding: 3px 9px;
+    cursor: pointer;
+  }
+  button.copy:hover { color: var(--code-str); border-color: rgba(217, 180, 91, .5); }
+  button.copy:focus-visible { outline: 2px solid var(--code-str); outline-offset: 1px; }
+
+  /* ---------- tablas ---------- */
+  .tw { overflow-x: auto; margin: 0 0 20px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  thead th {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 500;
+    background: var(--panel-2);
+    white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.nw { white-space: nowrap; }
+
+  .req { color: var(--gold); font-weight: 600; font-size: 12px; font-family: "IBM Plex Mono", monospace; }
+  .opt { color: var(--muted); font-size: 12px; font-family: "IBM Plex Mono", monospace; }
+
+  /* ---------- códigos HTTP ---------- */
+  .http {
+    display: inline-block;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 5px;
+    border: 1px solid;
+  }
+  .http.ok { color: var(--ok); background: var(--ok-wash); border-color: color-mix(in srgb, var(--ok) 30%, transparent); }
+  .http.retry { color: var(--warn); background: var(--warn-wash); border-color: color-mix(in srgb, var(--warn) 32%, transparent); }
+  .http.stop { color: var(--bad); background: var(--bad-wash); border-color: color-mix(in srgb, var(--bad) 30%, transparent); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 18px; margin: 0 0 18px; font-size: 13.5px; color: var(--ink-2); }
+  .legend b { font-weight: 600; }
+
+  /* ---------- reglas de oro ---------- */
+  .rules { list-style: none; margin: 0; padding: 0; counter-reset: rule; display: flex; flex-direction: column; gap: 2px; }
+  .rules li {
+    counter-increment: rule;
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 16px;
+    padding: 16px 18px 16px 14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--gold);
+  }
+  .rules li:first-child { border-radius: 10px 10px 0 0; }
+  .rules li:last-child { border-radius: 0 0 10px 10px; }
+  .rules li + li { border-top: none; }
+  .rules li::before {
+    content: counter(rule);
+    font-family: "Familjen Grotesk", sans-serif;
+    font-weight: 700;
+    font-size: 21px;
+    color: var(--gold-bright);
+    line-height: 1.25;
+  }
+  .rules h4 {
+    margin: 0 0 4px;
+    font-family: "Familjen Grotesk", sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -.005em;
+  }
+  .rules p { margin: 0; font-size: 14.5px; color: var(--ink-2); max-width: none; }
+
+  /* ---------- avisos ---------- */
+  .note {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--gold);
+    background: var(--gold-wash);
+    border-radius: 0 8px 8px 0;
+    padding: 13px 16px;
+    margin: 0 0 20px;
+    font-size: 14.5px;
+    color: var(--ink-2);
+  }
+  .note.danger { border-left-color: var(--bad); background: var(--bad-wash); }
+  .note b { color: var(--ink); }
+
+  /* ---------- endpoints ---------- */
+  .ep { display: flex; flex-direction: column; gap: 0; margin-bottom: 22px; }
+  .ep-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 10px;
+    padding: 12px 16px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+  }
+  .ep-row:first-child { border-radius: 10px 10px 0 0; }
+  .ep-row:last-child { border-radius: 0 0 10px 10px; }
+  .ep-row + .ep-row { border-top: none; }
+  .verb {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: var(--panel-2);
+    border: 1px solid var(--line-strong);
+    color: var(--ink-2);
+  }
+  .verb.post { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, transparent); background: var(--ok-wash); }
+  .verb.del { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 35%, transparent); background: var(--bad-wash); }
+  .ep-row .path { font-family: "IBM Plex Mono", monospace; font-size: 13.5px; color: var(--ink); }
+  .ep-row .what { color: var(--muted); font-size: 13.5px; flex: 1 1 220px; }
+
+  /* ---------- checklist ---------- */
+  .check { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+  .check li { background: var(--panel); border: 1px solid var(--line); }
+  .check li:first-child { border-radius: 10px 10px 0 0; }
+  .check li:last-child { border-radius: 0 0 10px 10px; }
+  .check li + li { border-top: none; }
+  .check label { display: flex; gap: 12px; align-items: flex-start; padding: 12px 16px; cursor: pointer; font-size: 14.5px; }
+  .check input { margin: 4px 0 0; accent-color: var(--gold-bright); width: 15px; height: 15px; flex: none; }
+  .check input:checked + span { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--line-strong); }
+
+  footer {
+    border-top: 1px solid var(--line);
+    margin-top: 20px;
+    padding-top: 22px;
+    color: var(--muted);
+    font-size: 13.5px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+    justify-content: space-between;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div>
+      <p class="eyebrow">Departamento Disruptivo</p>
+      <h1>Cobrar desde tu app</h1>
+      <p class="lede">
+        Tu app no gestiona tarjetas ni suscripciones. El cliente recarga saldo una vez desde su wallet de
+        GoHighLevel y todas las apps consumen de ahí. Tú solo haces una llamada HTTP cuando ocurre algo cobrable.
+      </p>
+    </div>
+    <div>
+      <div class="base-card">
+        <span class="k">URL base</span>
+        <code>https://apps-propias-marketplace.f7m8z2.easypanel.host</code>
+      </div>
+      <div class="base-card">
+        <span class="k">Autenticación</span>
+        <code>Authorization: Bearer dw_…</code>
+      </div>
+    </div>
+  </header>
+
+  <div class="cols">
+
+    <nav class="toc" aria-label="Secciones">
+      <ol>
+        <li><a href="#empezar">Antes de empezar</a></li>
+        <li><a href="#cobrar">Cobrar</a></li>
+        <li><a href="#respuestas">Qué hacer con cada respuesta</a></li>
+        <li><a href="#reglas">Las 7 reglas de oro</a></li>
+        <li><a href="#codigo">Código listo</a></li>
+        <li><a href="#endpoints">Resto de endpoints</a></li>
+        <li><a href="#pruebas">Modo prueba</a></li>
+        <li><a href="#limites">Límites y operativa</a></li>
+        <li><a href="#checklist">Checklist final</a></li>
+      </ol>
+    </nav>
+
+    <main>
+
+      <!-- 1 -->
+      <section id="empezar">
+        <h2><span class="num">01</span> Antes de empezar</h2>
+        <p class="sub">Cuatro datos y estás listo. Los tres primeros te los da el administrador del marketplace.</p>
+
+        <div class="tw">
+          <table>
+            <thead>
+              <tr><th>Dato</th><th>Qué es</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="nw"><code>URL base</code></td>
+                <td>El host del marketplace. Todas las rutas cuelgan de <code>/api/v1</code>.</td>
+              </tr>
+              <tr>
+                <td class="nw"><code>API key</code></td>
+                <td>Formato <code>dw_…</code>. Identifica a tu app. <strong>Solo se muestra una vez</strong>: guárdala en una variable de entorno.</td>
+              </tr>
+              <tr>
+                <td class="nw"><code>meter</code></td>
+                <td>El código de la tarifa que se te asigna, p. ej. <code>consumo-apps</code>. Define el precio por unidad.</td>
+              </tr>
+              <tr>
+                <td class="nw"><code>location_id</code></td>
+                <td>La subcuenta de GoHighLevel a la que cobras. Ya la tienes en tu propio OAuth.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>La cabecera va en <strong>todas</strong> las llamadas. Las dos formas son equivalentes:</p>
+
+        <div class="code">
+          <div class="code-head"><span>cabeceras</span><button class="copy" type="button">copiar</button></div>
+<pre>Authorization: Bearer dw_tu_api_key
+<span class="c"># o bien</span>
+X-Api-Key: dw_tu_api_key</pre>
+        </div>
+
+        <div class="note">
+          <b>Bearer va con B mayúscula y un espacio.</b> El servidor compara el prefijo literal: un
+          <code>bearer</code> en minúscula cae al fallback de <code>X-Api-Key</code> y responde
+          <span class="http stop">401</span>.
+        </div>
+
+        <p>Sin cabecera o con una clave revocada recibes <span class="http stop">401</span>. Comprueba qué tarifas
+          tienes disponibles y a qué subcuentas puedes cobrar:</p>
+
+        <div class="code">
+          <div class="code-head"><span>bash</span><button class="copy" type="button">copiar</button></div>
+<pre>curl -H <span class="s">"Authorization: Bearer $MD_API_KEY"</span> \
+  https://apps-propias-marketplace.f7m8z2.easypanel.host/api/v1/meters
+
+<span class="c"># → {"meters":[{"code":"consumo-apps","unit_label":"unidad",</span>
+<span class="c">#      "price_type":"dynamic","default_price":0.01,</span>
+<span class="c">#      "min_price":0.01,"max_price":100}, …]}</span></pre>
+        </div>
+      </section>
+
+      <!-- 2 -->
+      <section id="cobrar">
+        <h2><span class="num">02</span> Cobrar</h2>
+        <p class="sub">Un único endpoint hace el trabajo. El resto de la API es para consultar.</p>
+
+        <div class="code">
+          <div class="code-head"><span>POST /api/v1/charges</span><button class="copy" type="button">copiar</button></div>
+<pre>{
+  <span class="k">"location_id"</span>: <span class="s">"sljtYiFoE1qS7x1sSAQW"</span>,
+  <span class="k">"meter"</span>:       <span class="s">"consumo-apps"</span>,
+  <span class="k">"units"</span>:       3,
+  <span class="k">"event_id"</span>:    <span class="s">"hermes-conv842-lote7"</span>,
+  <span class="k">"price"</span>:       0.05,
+  <span class="k">"description"</span>: <span class="s">"3 mensajes de IA"</span>
+}</pre>
+        </div>
+
+        <div class="tw">
+          <table>
+            <thead>
+              <tr><th>Campo</th><th></th><th>Reglas exactas</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="nw"><code>location_id</code></td><td class="nw"><span class="req">obligatorio</span></td>
+                <td>La subcuenta debe estar conectada y en estado <code>connected</code>.</td>
+              </tr>
+              <tr>
+                <td class="nw"><code>meter</code></td><td class="nw"><span class="req">obligatorio</span></td>
+                <td>Código de la tarifa o <code>meterId</code> de GHL. Debe estar activa.</td>
+              </tr>
+              <tr>
+                <td class="nw"><code>units</code></td><td class="nw"><span class="req">obligatorio</span></td>
+                <td>Número <strong>&gt; 0</strong> y ≤ 1 000 000, con un máximo de <strong>4 decimales</strong>: la columna es <code>numeric(12,4)</code> y lo que pase de ahí se redondea en silencio.</td>
+              </tr>
+              <tr>
+                <td class="nw"><code>event_id</code></td><td class="nw"><span class="req">obligatorio</span></td>
+                <td>Máx. 190 caracteres. <strong>Tu</strong> identificador único de la operación: es la clave de toda la idempotencia. Es único por <em>(app, event_id)</em>, así que otra app puede usar el mismo valor sin colisionar contigo.</td>
+              </tr>
+              <tr>
+                <td class="nw"><code>price</code></td><td class="nw"><span class="opt">opcional</span></td>
+                <td>Precio por unidad. <strong>Solo</strong> en tarifas <code>dynamic</code>, dentro de su mínimo y máximo (inclusive). En una tarifa fija devuelve <span class="http stop">400</span>; en una dinámica <em>sin</em> precio por defecto, es obligatorio.</td>
+              </tr>
+              <tr>
+                <td class="nw"><code>description</code></td><td class="nw"><span class="opt">opcional</span></td>
+                <td>Máx. 500 caracteres. Por defecto, el nombre de la tarifa.</td>
+              </tr>
+              <tr>
+                <td class="nw"><code>user_id</code></td><td class="nw"><span class="opt">opcional</span></td>
+                <td>Texto libre, se guarda en el ledger.</td>
+              </tr>
+              <tr>
+                <td class="nw"><code>event_time</code></td><td class="nw"><span class="opt">opcional</span></td>
+                <td>Fecha ISO 8601 válida.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>El importe es <code>units × price_per_unit</code>, redondeado a 6 decimales. La divisa es siempre
+          <strong>USD</strong>: GoHighLevel no admite otra.</p>
+
+        <h3>El objeto <code>charge</code> que recibes</h3>
+        <div class="code">
+          <div class="code-head"><span>respuesta</span><button class="copy" type="button">copiar</button></div>
+<pre>{
+  <span class="k">"id"</span>: 12,
+  <span class="k">"event_id"</span>: <span class="s">"hermes-conv842-lote7"</span>,
+  <span class="k">"location_id"</span>: <span class="s">"sljtYiFoE1qS7x1sSAQW"</span>,
+  <span class="k">"meter"</span>: <span class="s">"consumo-apps"</span>,
+  <span class="k">"units"</span>: 3,
+  <span class="k">"price_per_unit"</span>: 0.05,
+  <span class="k">"amount"</span>: 0.15,
+  <span class="k">"currency"</span>: <span class="s">"USD"</span>,
+  <span class="k">"status"</span>: <span class="s">"created"</span>,
+  <span class="k">"paid_with"</span>: <span class="s">"wallet"</span>,   <span class="c">// o "credit"</span>
+  <span class="k">"kind"</span>: <span class="s">"usage"</span>,
+  <span class="k">"ghl_charge_id"</span>: <span class="s">"abc123"</span>,
+  <span class="k">"description"</span>: <span class="s">"3 mensajes de IA"</span>,
+  <span class="k">"error"</span>: null,
+  <span class="k">"created_at"</span>: <span class="s">"2026-09-06T12:30:01.000Z"</span>
+}</pre>
+        </div>
+
+        <p><code>paid_with</code> te dice si el importe salió del saldo interno del cliente o de su wallet de GHL.
+          A tu app le da igual: en ambos casos está cobrado. Si se pagó con crédito,
+          <code>ghl_charge_id</code> viene a <code>null</code> — eso <strong>no</strong> es un fallo.</p>
+
+        <p>Guarda el <code>id</code> numérico: es lo único que acepta <code>DELETE /api/v1/charges/:id</code>, no se
+          puede reembolsar por <code>event_id</code>. Lee las respuestas por nombre de campo y tolera que aparezcan
+          campos nuevos.</p>
+
+        <div class="tw">
+          <table>
+            <thead>
+              <tr><th>status</th><th>Significa</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="nw"><code>created</code></td><td>Cobrado. Sirve tu servicio.</td></tr>
+              <tr><td class="nw"><code>test</code></td><td>Modo prueba: registrado, sin tocar dinero.</td></tr>
+              <tr><td class="nw"><code>pending</code></td><td>En vuelo hacia GoHighLevel.</td></tr>
+              <tr><td class="nw"><code>failed</code></td><td>GHL lo rechazó. Es reintentable con el mismo <code>event_id</code>.</td></tr>
+              <tr><td class="nw"><code>unknown</code></td><td>Sin confirmación. Se reconcilia solo; nunca lo des por fallido.</td></tr>
+              <tr><td class="nw"><code>refunded</code> · <code>refunding</code></td><td>Reembolsado o en curso de reembolso.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 3 -->
+      <section id="respuestas">
+        <h2><span class="num">03</span> Qué hacer con cada respuesta</h2>
+        <p class="sub">Esta tabla es el contrato. Si la implementas bien, no hay forma de cobrar dos veces al cliente.</p>
+
+        <div class="legend">
+          <span><b style="color:var(--ok)">■</b> sigue adelante</span>
+          <span><b style="color:var(--warn)">■</b> reintenta con el mismo <code>event_id</code></span>
+          <span><b style="color:var(--bad)">■</b> arregla la petición</span>
+        </div>
+
+        <div class="tw">
+          <table>
+            <thead>
+              <tr><th>Código</th><th>Cuerpo</th><th>Qué haces</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="nw"><span class="http ok">201</span></td>
+                <td><code>{ test_mode, charge }</code></td>
+                <td>Cobrado. Sirve el servicio.</td>
+              </tr>
+              <tr>
+                <td class="nw"><span class="http ok">200</span></td>
+                <td><code>{ idempotent: true, charge }</code></td>
+                <td>Ese <code>event_id</code> <strong>ya estaba cobrado</strong>. No es un error: sigue adelante y no vuelvas a cobrar.</td>
+              </tr>
+              <tr>
+                <td class="nw"><span class="http ok">200</span></td>
+                <td><code>{ reconciled: true, … }</code></td>
+                <td>Un intento anterior sí llegó a cobrar en GHL y se ha recuperado. Sigue adelante.</td>
+              </tr>
+              <tr>
+                <td class="nw"><span class="http retry">409</span></td>
+                <td><code>{ error, charge_id }</code></td>
+                <td>Ese <code>event_id</code> tiene un cobro en curso. Espera 2–5 s y repite la <strong>misma</strong> petición.</td>
+              </tr>
+              <tr>
+                <td class="nw"><span class="http retry">429</span></td>
+                <td><code>{ error }</code></td>
+                <td>Superaste el límite por minuto. Backoff y repite.</td>
+              </tr>
+              <tr>
+                <td class="nw"><span class="http retry">502</span></td>
+                <td><code>{ error, charge }</code></td>
+                <td>GHL rechazó el cobro (<code>failed</code>) o no lo confirmó (<code>unknown</code>). Repite con el mismo <code>event_id</code>: la pasarela comprueba en GHL si el intento anterior cobró antes de volver a ejecutarlo.</td>
+              </tr>
+              <tr>
+                <td class="nw"><span class="http retry">503</span></td>
+                <td><code>{ error, charge_id }</code></td>
+                <td>No se pudo verificar el intento anterior contra GHL. Repite en unos segundos.</td>
+              </tr>
+              <tr>
+                <td class="nw"><span class="http stop">400</span></td>
+                <td><code>{ error }</code></td>
+                <td>Campo ausente o inválido. Reintentar igual no sirve: corrige la petición.</td>
+              </tr>
+              <tr>
+                <td class="nw"><span class="http stop">401</span></td>
+                <td><code>{ error }</code></td>
+                <td>Falta la API key o está revocada.</td>
+              </tr>
+              <tr>
+                <td class="nw"><span class="http stop">403</span></td>
+                <td><code>{ error }</code></td>
+                <td>Tu clave no está autorizada para esa subcuenta.</td>
+              </tr>
+              <tr>
+                <td class="nw"><span class="http stop">404</span></td>
+                <td><code>{ error }</code></td>
+                <td>Tarifa inexistente o inactiva, o subcuenta no conectada.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="note danger">
+          <b>El error que cuesta dinero:</b> tratar todo lo que no sea <code>201</code> como fallo y volver a cobrar
+          con un <code>event_id</code> nuevo. Acepta <code>200</code> y <code>201</code> como éxito, y reintenta
+          siempre con el mismo identificador.
+        </div>
+      </section>
+
+      <!-- 4 -->
+      <section id="reglas">
+        <h2><span class="num">04</span> Las 7 reglas de oro</h2>
+        <p class="sub">Se mueve dinero real de tus clientes. Estas siete reglas son todo lo que hay que respetar.</p>
+
+        <ol class="rules">
+          <li>
+            <div>
+              <h4>Un <code>event_id</code> único y estable por operación</h4>
+              <p>Derívalo de tus propios identificadores, nunca de un aleatorio ni de la hora:
+                <code>hermes-conv842-lote7</code>, <code>vslboost-video91-transcode</code>,
+                <code>emails-envio-55231</code>. Es lo único que impide cobrar dos veces.</p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <h4>Ante fallo transitorio, reintenta con el mismo <code>event_id</code></h4>
+              <p>Timeout, error de red, <code>502</code>, <code>503</code>, <code>429</code>: repite la misma
+                petición. Generar un identificador nuevo «para desatascar» es exactamente lo que duplica el cobro.</p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <h4><code>200 idempotent</code> es éxito, no fallo</h4>
+              <p>Significa que ese cobro ya estaba hecho. Trata <code>200</code> y <code>201</code> igual.</p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <h4><code>409</code> significa «espera», no «ha fallado»</h4>
+              <p>Hay un intento en vuelo para ese <code>event_id</code>. Reintenta con backoff: normalmente el
+                anterior termina en segundos y recibes <code>200 idempotent</code>. Si aquel proceso murió, el
+                desbloqueo duro llega a los <strong>90 segundos</strong>.</p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <h4>No cambies el payload de un <code>event_id</code> ya enviado</h4>
+              <p>Un reintento reescribe la fila con lo que mandes, pero GoHighLevel sigue deduplicando por el intento
+                original y acabará mandando el importe <strong>realmente cobrado</strong>. Si de verdad cambian las
+                unidades, es otro hecho facturable: usa un <code>event_id</code> nuevo.</p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <h4>No mandes <code>price</code> en tarifas fijas</h4>
+              <p>Devuelve <code>400</code>. Consulta <code>price_type</code> en <code>GET /api/v1/meters</code> y
+                envía <code>price</code> solo si es <code>dynamic</code>.</p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <h4>Cobra después de entregar, o comprueba fondos antes</h4>
+              <p>Si cobras antes y tu proceso falla, tendrás que reembolsar. Si entregas primero, sabes exactamente
+                qué cobro reintentar.</p>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <!-- 5 -->
+      <section id="codigo">
+        <h2><span class="num">05</span> Código listo</h2>
+        <p class="sub">Esta función implementa las seis reglas. Cópiala y adapta el transporte a tu stack.</p>
+
+        <div class="code">
+          <div class="code-head"><span>javascript</span><button class="copy" type="button">copiar</button></div>
+<pre><span class="k">const</span> BASE = <span class="s">'https://apps-propias-marketplace.f7m8z2.easypanel.host'</span>
+<span class="k">const</span> KEY  = process.env.MD_API_KEY
+
+<span class="k">const</span> sleep = (ms) =&gt; <span class="k">new</span> Promise((r) =&gt; setTimeout(r, ms))
+
+<span class="k">export async function</span> cobrar({ locationId, meter, units, eventId, price, description }) {
+  <span class="k">const</span> body = { location_id: locationId, meter, units, event_id: eventId, price, description }
+
+  <span class="k">for</span> (<span class="k">let</span> intento = 0; intento &lt; 5; intento++) {
+    <span class="k">let</span> res, data
+    <span class="k">try</span> {
+      res = <span class="k">await</span> fetch(`${BASE}/api/v1/charges`, {
+        method: <span class="s">'POST'</span>,
+        headers: { Authorization: `Bearer ${KEY}`, <span class="s">'Content-Type'</span>: <span class="s">'application/json'</span> },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(35_000),
+      })
+      data = <span class="k">await</span> res.json().catch(() =&gt; ({}))
+    } <span class="k">catch</span> {
+      <span class="k">await</span> sleep(2000 * (intento + 1)); <span class="k">continue</span>      <span class="c">// red/timeout → MISMO event_id</span>
+    }
+
+    <span class="c">// 200 (ya cobrado) y 201 (cobrado ahora) son ambos ÉXITO</span>
+    <span class="k">if</span> (res.status === 201 || res.status === 200) <span class="k">return</span> data.charge
+
+    <span class="c">// transitorios: se repite la MISMA petición</span>
+    <span class="k">if</span> ([409, 429, 502, 503].includes(res.status)) {
+      <span class="k">await</span> sleep(2000 * (intento + 1)); <span class="k">continue</span>
+    }
+
+    <span class="c">// 400/401/403/404: error de tu petición, no insistas</span>
+    <span class="k">throw new</span> Error(`Cobro rechazado (${res.status}): ${data.error}`)
+  }
+
+  <span class="c">// Sin confirmar tras los reintentos: NO cobres con otro event_id.</span>
+  <span class="c">// El reconciliador lo cierra solo; compruébalo luego con</span>
+  <span class="c">// GET /api/v1/charges?event_id=...</span>
+  <span class="k">throw new</span> Error(<span class="s">'Cobro sin confirmar; se reconciliará automáticamente'</span>)
+}</pre>
+        </div>
+
+        <div class="note">
+          <b>¿Y si tras los 5 intentos sigue sin confirmarse?</b> No pasa nada: no vuelvas a cobrar. Un proceso en
+          segundo plano revisa cada 60 s los cobros sin confirmar, le pregunta a GoHighLevel y los cierra
+          correctamente. Consulta el estado final con
+          <code>GET /api/v1/charges?event_id=…</code>.
+        </div>
+      </section>
+
+      <!-- 6 -->
+      <section id="endpoints">
+        <h2><span class="num">06</span> Resto de endpoints</h2>
+        <p class="sub">Todos con la misma cabecera de autenticación. Tu clave solo ve y toca datos de tu propia app.</p>
+
+        <div class="ep">
+          <div class="ep-row">
+            <span class="verb">GET</span>
+            <span class="path">/api/v1/locations/:locationId/has-funds</span>
+            <span class="what">¿Puede pagar esta subcuenta?</span>
+          </div>
+          <div class="ep-row">
+            <span class="verb">GET</span>
+            <span class="path">/api/v1/access/:locationId</span>
+            <span class="what">¿Tiene suscripción vigente a tu app?</span>
+          </div>
+          <div class="ep-row">
+            <span class="verb">GET</span>
+            <span class="path">/api/v1/charges</span>
+            <span class="what">Historial de tus cobros</span>
+          </div>
+          <div class="ep-row">
+            <span class="verb del">DELETE</span>
+            <span class="path">/api/v1/charges/:id</span>
+            <span class="what">Reembolsar un cobro tuyo</span>
+          </div>
+          <div class="ep-row">
+            <span class="verb">GET</span>
+            <span class="path">/api/v1/meters</span>
+            <span class="what">Tarifas activas y sus precios</span>
+          </div>
+          <div class="ep-row">
+            <span class="verb">GET</span>
+            <span class="path">/api/v1/locations</span>
+            <span class="what">Subcuentas que puedes cobrar</span>
+          </div>
+        </div>
+
+        <h3>Comprobar fondos</h3>
+        <div class="code">
+          <div class="code-head"><span>GET /api/v1/locations/:locationId/has-funds</span><button class="copy" type="button">copiar</button></div>
+<pre>{ <span class="k">"hasFunds"</span>: true, <span class="k">"credit"</span>: 12.5, <span class="k">"wallet_has_funds"</span>: null }</pre>
+        </div>
+        <p><code>credit</code> es el saldo interno del cliente, que se gasta <strong>antes</strong> que su wallet.
+          Si hay crédito, <code>hasFunds</code> ya es <code>true</code> sin preguntar a GoHighLevel y
+          <code>wallet_has_funds</code> viene a <code>null</code>. Errores:
+          <span class="http stop">404</span> no conectada,
+          <span class="http stop">409</span> conexión caída,
+          <span class="http retry">502</span> GHL no respondió.</p>
+        <p><strong>No reserva nada:</strong> el saldo lo comparten todas las apps del marketplace, así que entre tu
+          comprobación y tu cobro otro puede haberlo consumido. Es un semáforo previo, no una garantía.</p>
+
+        <h3>Control de acceso, si vendes por suscripción</h3>
+        <div class="code">
+          <div class="code-head"><span>GET /api/v1/access/:locationId</span><button class="copy" type="button">copiar</button></div>
+<pre>{ <span class="k">"access"</span>: true, <span class="k">"via"</span>: <span class="s">"plan"</span>, <span class="k">"plan"</span>: <span class="s">"Pack Disruptivo"</span>,
+  <span class="k">"status"</span>: <span class="s">"active"</span>, <span class="k">"starts_at"</span>: <span class="s">"…"</span>, <span class="k">"ends_at"</span>: null,
+  <span class="k">"subscription_id"</span>: 3, <span class="k">"credit"</span>: 12.5 }
+
+<span class="c">// sin acceso:</span>
+{ <span class="k">"access"</span>: false, <span class="k">"credit"</span>: 0 }</pre>
+        </div>
+        <p>El administrador concede o corta el acceso desde su panel y tu app se entera sola: no tienes que tocar
+          código para dar una prueba gratis o cortar a quien no paga. <code>status</code> puede ser
+          <code>trial</code>, <code>active</code> o <code>comped</code> (cortesía);
+          <code>ends_at: null</code> significa sin caducidad.</p>
+
+        <h3>Historial y reembolso</h3>
+        <div class="code">
+          <div class="code-head"><span>bash</span><button class="copy" type="button">copiar</button></div>
+<pre><span class="c"># filtros: location_id, event_id, status · limit 1–200 (def. 50) · offset</span>
+GET /api/v1/charges?event_id=hermes-conv842-lote7
+<span class="c">// → { "charges": [ { … } ] }</span>
+
+<span class="c"># devuelve el dinero al wallet (o el saldo al crédito interno)</span>
+DELETE /api/v1/charges/12
+<span class="c">// → { "charge": { …, "status": "refunded" } }</span></pre>
+        </div>
+        <p>Filtrar por <code>event_id</code> es la forma de saber cómo acabó un cobro que quedó dudoso.</p>
+      </section>
+
+      <!-- 7 -->
+      <section id="pruebas">
+        <h2><span class="num">07</span> Modo prueba</h2>
+        <p class="sub">Para integrar sin gastar un céntimo.</p>
+        <p>El administrador puede activarlo a tres niveles: global, por subcuenta o por app. Con cualquiera activo,
+          tus cobros se registran con <code>status: "test"</code> y la respuesta trae <code>test_mode: true</code>,
+          pero <strong>no tocan el wallet ni el crédito</strong>.</p>
+        <div class="note">
+          Pídele al administrador que active el modo prueba <b>de tu app</b> mientras integras, y que lo desactive
+          el día que pasas a producción. Haz entonces un cobro real pequeño y compruébalo con él en el panel.
+        </div>
+      </section>
+
+      <!-- 8 -->
+      <section id="limites">
+        <h2><span class="num">08</span> Límites y operativa</h2>
+        <p class="sub">Lo que conviene saber antes de que pase en producción.</p>
+
+        <div class="tw">
+          <table>
+            <thead><tr><th>Tema</th><th>Comportamiento</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="nw">Rate limit</td>
+                <td>600 peticiones/min por API key. Todas las respuestas traen
+                  <code>X-RateLimit-Remaining</code>; al pasarte, <span class="http retry">429</span>.</td>
+              </tr>
+              <tr>
+                <td class="nw">Aislamiento</td>
+                <td>Con tu clave solo ves tus cobros. Un <code>DELETE</code> sobre el cargo de otra app devuelve
+                  <span class="http stop">404</span>.</td>
+              </tr>
+              <tr>
+                <td class="nw">Alcance</td>
+                <td>El administrador puede limitar tu clave a subcuentas concretas. Fuera de esa lista recibes
+                  <span class="http stop">403</span>, y <code>GET /api/v1/locations</code> solo lista las permitidas.</td>
+              </tr>
+              <tr>
+                <td class="nw">Reconciliación</td>
+                <td>Cada 60 s se revisan los cobros <code>unknown</code> (&gt;3 min) y los <code>pending</code>
+                  huérfanos (&gt;10 min): se consulta a GoHighLevel y se cierran correctamente. Ningún cobro
+                  sin confirmar se pierde ni se duplica.</td>
+              </tr>
+              <tr>
+                <td class="nw">Rotación de claves</td>
+                <td>Si la clave se filtra, el administrador la regenera y la anterior deja de funcionar al instante.
+                  Guárdala en una variable de entorno, nunca en el repositorio.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 9 -->
+      <section id="checklist">
+        <h2><span class="num">09</span> Checklist final</h2>
+        <p class="sub">Antes de dar por integrada tu app. Se marca en tu navegador.</p>
+
+        <ul class="check" id="cl">
+          <li><label><input type="checkbox"><span>La API key vive en una variable de entorno, no en el código.</span></label></li>
+          <li><label><input type="checkbox"><span>Cada operación cobrable tiene un <code>event_id</code> único y reproducible.</span></label></li>
+          <li><label><input type="checkbox"><span>Trato <code>200</code> y <code>201</code> como éxito.</span></label></li>
+          <li><label><input type="checkbox"><span>Reintento <code>409/429/502/503</code> y timeouts con el mismo <code>event_id</code> y backoff.</span></label></li>
+          <li><label><input type="checkbox"><span>Los <code>400/401/403/404</code> los trato como bug de mi petición, sin reintentar en bucle.</span></label></li>
+          <li><label><input type="checkbox"><span>Probé el flujo completo con el modo prueba activado.</span></label></li>
+          <li><label><input type="checkbox"><span>Hice un cobro real pequeño y lo vimos en el panel del administrador.</span></label></li>
+          <li><label><input type="checkbox"><span>Si vendo por suscripción, mi app consulta <code>GET /api/v1/access/:locationId</code>.</span></label></li>
+        </ul>
+      </section>
+
+      <footer>
+        <span>Marketplace Disruptivo · API v1</span>
+        <span>¿Dudas sobre tarifas, claves o accesos? Habla con el administrador del marketplace.</span>
+      </footer>
+
+    </main>
+  </div>
+</div>
+
+<script>
+  // copiar bloques de código
+  for (const btn of document.querySelectorAll('button.copy')) {
+    btn.addEventListener('click', async () => {
+      const pre = btn.closest('.code').querySelector('pre');
+      try {
+        await navigator.clipboard.writeText(pre.innerText);
+        const prev = btn.textContent;
+        btn.textContent = 'copiado';
+        setTimeout(() => { btn.textContent = prev; }, 1400);
+      } catch {
+        btn.textContent = 'usa ctrl+c';
+        setTimeout(() => { btn.textContent = 'copiar'; }, 1800);
+      }
+    });
+  }
+
+  // checklist: conveniencia por navegador de cada desarrollador
+  const boxes = [...document.querySelectorAll('#cl input')];
+  const KEY = 'md-api-checklist';
+  try {
+    const saved = JSON.parse(localStorage.getItem(KEY) || '[]');
+    boxes.forEach((b, i) => { b.checked = Boolean(saved[i]); });
+  } catch { /* almacenamiento no disponible: la lista funciona igual */ }
+  for (const b of boxes) {
+    b.addEventListener('change', () => {
+      try { localStorage.setItem(KEY, JSON.stringify(boxes.map((x) => x.checked))); } catch { /* ignorar */ }
+    });
+  }
+</script>
