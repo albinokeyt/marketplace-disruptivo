@@ -45,8 +45,10 @@ export default async function publicApiRoutes(app) {
     } catch (err) {
       return reply.code(err.statusCode || 400).send({ error: err.message })
     }
+    // `code` es un identificador ESTABLE para que las apps ramifiquen sin depender del texto del mensaje
     if (input.meter.code === (await topupMeterCode())) {
       return reply.code(403).send({
+        code: 'TOPUP_METER_FORBIDDEN',
         error: `La tarifa "${input.meter.code}" es la de recarga de saldo y no se puede cobrar desde una app: cobraría del wallet sin abonar crédito`,
       })
     }
@@ -54,6 +56,7 @@ export default async function publicApiRoutes(app) {
     // accesos, tarifas e historial, así que puede avisar al usuario en vez de romperse
     if (consumer.can_charge === false) {
       return reply.code(403).send({
+        code: 'CHARGES_DISABLED',
         error: 'Los cobros de esta app están deshabilitados por el administrador del marketplace',
       })
     }
