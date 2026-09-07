@@ -29,6 +29,9 @@ Authorization: Bearer dw_tu_api_key
 X-Api-Key: dw_tu_api_key
 ```
 
+⚠️ `Bearer` va con **B mayúscula y un espacio**: el servidor compara el prefijo literal. Un `bearer` en minúscula
+cae al fallback de `X-Api-Key` y, si no la mandas, responde `401`.
+
 Sin cabecera o con clave revocada → `401`. La clave identifica a tu app: cada app **solo ve y reembolsa sus
 propios cargos**.
 
@@ -58,9 +61,9 @@ Content-Type: application/json
 |---|---|---|
 | `location_id` | **sí** | string; la subcuenta debe estar conectada y en estado `connected` |
 | `meter` | **sí** | string: el **código** de la tarifa (p. ej. `consumo-apps`) o el `meterId` de GHL. Debe estar activa |
-| `units` | **sí** | número **> 0** y ≤ 1 000 000 (admite decimales) |
-| `event_id` | **sí** | string, máx. **190** caracteres. **Tu** identificador único de la operación → es la clave de la idempotencia |
-| `price` | no | Precio por unidad. **Solo** si la tarifa es de tipo `dynamic`; se valida contra su mínimo/máximo. En tarifas fijas → `400` |
+| `units` | **sí** | número **> 0** y ≤ 1 000 000. Máximo **4 decimales**: la columna es `numeric(12,4)` y Postgres redondea en silencio lo que pase de ahí |
+| `event_id` | **sí** | string, máx. **190** caracteres. **Tu** identificador único de la operación → es la clave de la idempotencia. Único por *(app, event_id)*: otra app puede usar el mismo valor sin colisionar |
+| `price` | no | Precio por unidad. **Solo** si la tarifa es de tipo `dynamic`; se valida contra su mínimo/máximo (inclusive). En tarifas fijas → `400`. Si la tarifa es dinámica y **no** tiene precio por defecto, `price` es obligatorio |
 | `description` | no | máx. 500 caracteres. Por defecto, el nombre de la tarifa |
 | `user_id` | no | string libre; se guarda en el ledger |
 | `event_time` | no | fecha ISO 8601 válida |
@@ -104,12 +107,17 @@ El importe es `units × price_per_unit`, redondeado a 6 decimales. Divisa: **USD
 }
 ```
 
-- `paid_with`: `credit` (salió del saldo interno) o `wallet` (se cobró al wallet de GHL). A ti te da igual: en ambos casos está cobrado.
+- `paid_with`: `credit` (salió del saldo interno) o `wallet` (se cobró al wallet de GHL). A ti te da igual: en ambos
+  casos está cobrado. **Ojo:** si se pagó con crédito, `ghl_charge_id` viene a `null` — eso **no** es un fallo.
 - `status`: `created` cobrado · `test` modo prueba (no toca dinero) · `pending` en vuelo · `failed` GHL lo rechazó · `unknown` sin confirmación · `refunded` / `refunding` reembolsado.
+- **La verdad del cobro está en `status`, no en el código HTTP.** Ramifica tu lógica de entrega por este campo.
+- Guarda el **`id` numérico**: es lo único que acepta `DELETE /api/v1/charges/:id`. No se puede reembolsar por
+  `event_id` (si no lo guardaste, recupéralo con `GET /api/v1/charges?event_id=…`).
+- Lee las respuestas **por nombre de campo** y tolera campos nuevos: el objeto puede crecer.
 
 ---
 
-## 3. Las 6 reglas de oro (léelas antes de escribir código)
+## 3. Las 7 reglas de oro (léelas antes de escribir código)
 
 1. **Un `event_id` único y ESTABLE por operación cobrable.** Derívalo de tus propios ids, nunca de un random ni
    de la hora: `hermes-conv842-lote7`, `vslboost-video91-transcode`, `emails-envio-55231`. Es lo único que impide
@@ -122,11 +130,17 @@ El importe es `units × price_per_unit`, redondeado a 6 decimales. Divisa: **USD
 3. **`200` con `idempotent: true` es éxito**, no un fallo. Si tratas todo lo que no sea `201` como error, cobrarás
    de más. Acepta `200` y `201` como "cobrado".
 
-4. **`409` significa "espera"**, no "falla". Reintenta el mismo `event_id` con un pequeño backoff (2–5 s).
+4. **`409` significa "espera"**, no "falla". Hay un intento en vuelo para ese `event_id`. Reintenta con backoff:
+   normalmente el intento anterior termina en segundos y recibes `200 idempotent`. Si el proceso anterior murió,
+   el desbloqueo duro llega a los **90 s**.
 
-5. **No mandes `price` si la tarifa es fija.** Devuelve `400`. Consulta el tipo en `GET /api/v1/meters`.
+5. **No cambies el payload de un `event_id` ya enviado.** Un reintento reescribe la fila con lo que mandes, pero
+   GoHighLevel sigue deduplicando por el intento original y acabará mandando el importe **realmente cobrado**. Si
+   de verdad cambian las unidades, es otro hecho facturable: usa un `event_id` nuevo.
 
-6. **Cobra DESPUÉS de entregar el servicio**, o comprueba fondos antes. Si cobras antes y tu proceso falla,
+6. **No mandes `price` si la tarifa es fija.** Devuelve `400`. Consulta el tipo en `GET /api/v1/meters`.
+
+7. **Cobra DESPUÉS de entregar el servicio**, o comprueba fondos antes. Si cobras antes y tu proceso falla,
    tendrás que reembolsar; si entregas primero y el cobro falla, ya sabes qué reintentar.
 
 ### Reintento correcto (JavaScript)
@@ -180,6 +194,9 @@ GET /api/v1/locations/:locationId/has-funds
 `credit` es el saldo interno (se gasta **antes** que el wallet). Si `credit > 0`, `hasFunds` es `true` sin
 preguntar a GHL y `wallet_has_funds` viene a `null`. Errores: `404` no conectada · `409` conexión caída ·
 `502` GHL no respondió.
+
+**No reserva nada:** el saldo lo comparten todas las apps del marketplace, así que entre tu comprobación y tu
+cobro otro puede haberlo consumido. Úsalo como semáforo previo, nunca como garantía.
 
 ### ¿Esta subcuenta tiene acceso/suscripción a MI app?
 

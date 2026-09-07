@@ -4,6 +4,7 @@ import { rateLimit } from '../lib/ratelimit.js'
 import { resolveChargeInput, executeCharge, reconcileCharge, refundCharge, publicCharge } from '../lib/charges.js'
 import { checkAccess } from '../lib/access.js'
 import { trySpendCredit, getBalance } from '../lib/credits.js'
+import { getTopupConfig } from '../lib/topup.js'
 import * as ghl from '../lib/ghl.js'
 
 const RATE_PER_MIN = numOr(process.env.API_RATE_PER_MIN, 600) ?? 600
@@ -28,6 +29,10 @@ const locationAllowed = (appRow, locationId) =>
 
 const STALE_PENDING_SECONDS = 90
 
+// La tarifa de RECARGA es interna: la firma la app de sistema al abonar crédito. Si una app consumidora
+// cobrase con ella, sacaría dinero del wallet del cliente SIN abonarle nada. Queda fuera de la API pública.
+const topupMeterCode = async () => (await getTopupConfig()).meter_code
+
 export default async function publicApiRoutes(app) {
   app.addHook('preHandler', authApp)
 
@@ -39,6 +44,11 @@ export default async function publicApiRoutes(app) {
       input = await resolveChargeInput(consumer, req.body)
     } catch (err) {
       return reply.code(err.statusCode || 400).send({ error: err.message })
+    }
+    if (input.meter.code === (await topupMeterCode())) {
+      return reply.code(403).send({
+        error: `La tarifa "${input.meter.code}" es la de recarga de saldo y no se puede cobrar desde una app: cobraría del wallet sin abonar crédito`,
+      })
     }
 
     const initialStatus = input.testMode ? 'test' : 'pending'
@@ -194,11 +204,12 @@ export default async function publicApiRoutes(app) {
     }
   })
 
-  // Tarifas activas disponibles
+  // Tarifas activas disponibles (sin la de recarga: no es cobrable desde una app)
   app.get('/api/v1/meters', async () => {
     const { rows } = await q(
       `SELECT code, name, unit_label, price_type, default_price, min_price, max_price
-       FROM meters WHERE active=true ORDER BY code`
+       FROM meters WHERE active=true AND code <> $1 ORDER BY code`,
+      [await topupMeterCode()]
     )
     return {
       meters: rows.map((m) => ({
