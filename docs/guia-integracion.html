@@ -890,6 +890,38 @@ X-Api-Key: dw_tu_api_key</pre>
         <p><strong>No reserva nada:</strong> el saldo lo comparten todas las apps del marketplace, así que entre tu
           comprobación y tu cobro otro puede haberlo consumido. Es un semáforo previo, no una garantía.</p>
 
+        <h3>Si vendes por suscripción, no cobras tú</h3>
+        <p>Hay dos formas de cobrar y puedes usar las dos a la vez:</p>
+        <div class="tw">
+          <table>
+            <thead>
+              <tr><th></th><th>Cobro por uso</th><th>Cobro por suscripción</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="nw">Quién cobra</td>
+                <td><strong>Tu app</strong>, con <code>POST /api/v1/charges</code></td>
+                <td><strong>El marketplace</strong>, solo, cada periodo</td>
+              </tr>
+              <tr>
+                <td class="nw">Cuándo</td>
+                <td>Cada vez que el cliente consume</td>
+                <td>Cada N meses, en la fecha de renovación</td>
+              </tr>
+              <tr>
+                <td class="nw">Qué implementas</td>
+                <td>La llamada de cobro</td>
+                <td><strong>Nada</strong>: solo <code>GET /api/v1/access/:locationId</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Si tu app es de plan mensual (o anual), <strong>no implementes cobros</strong>: el administrador crea la
+          suscripción con su precio y renovación automática, el marketplace la cobra del saldo del cliente y le
+          extiende el acceso solo. Tu app únicamente pregunta si hay acceso y sirve o corta. Si el cobro falla
+          varias veces, la suscripción pasa a impagada y <code>access</code> te devolverá <code>false</code> sin
+          que tengas que hacer nada.</p>
+
         <h3>Control de acceso, si vendes por suscripción</h3>
         <div class="code">
           <div class="code-head"><span>GET /api/v1/access/:locationId</span><button class="copy" type="button">copiar</button></div>
