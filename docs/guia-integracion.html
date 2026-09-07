@@ -703,8 +703,10 @@ X-Api-Key: dw_tu_api_key</pre>
               </tr>
               <tr>
                 <td class="nw"><span class="http stop">403</span></td>
-                <td><code>{ error }</code></td>
-                <td>Tu clave no está autorizada para esa subcuenta.</td>
+                <td><code>{ error, code? }</code></td>
+                <td>Tu clave no está autorizada para esa subcuenta. Con <code>code: "CHARGES_DISABLED"</code> el
+                  administrador ha cortado los cobros de tu app: deja de cobrar y sigue sirviendo o para, según tu
+                  producto (el resto de la API sigue funcionando). Ramifica por <code>code</code>, no por el texto.</td>
               </tr>
               <tr>
                 <td class="nw"><span class="http stop">404</span></td>
@@ -740,7 +742,11 @@ X-Api-Key: dw_tu_api_key</pre>
             <div>
               <h4>Ante fallo transitorio, reintenta con el mismo <code>event_id</code></h4>
               <p>Timeout, error de red, <code>502</code>, <code>503</code>, <code>429</code>: repite la misma
-                petición. Generar un identificador nuevo «para desatascar» es exactamente lo que duplica el cobro.</p>
+                petición. Generar un identificador nuevo «para desatascar» es exactamente lo que duplica el cobro.
+                <strong>Incluye los cargos en <code>unknown</code>:</strong> el reconciliador solo los cierra si
+                GoHighLevel confirma que cobró; si dice que no existe, no lo da por fallido (por diseño). Pasados
+                ≥ 5 minutos, reenvía tú el mismo <code>event_id</code>: es seguro, el <code>POST</code> reconcilia
+                primero y solo re-ejecuta si GHL confirma que el intento anterior no cobró.</p>
             </div>
           </li>
           <li>

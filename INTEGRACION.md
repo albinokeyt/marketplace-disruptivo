@@ -78,7 +78,7 @@ El importe es `units × price_per_unit`, redondeado a 6 decimales. Divisa: **USD
 | **200** | `{ "idempotent": true, "charge": {…} }` | Ese `event_id` ya estaba cobrado. **No es un error**: sigue adelante, no vuelvas a cobrar |
 | **200** | `{ "idempotent": true, "reconciled": true, … }` | Un intento anterior sí había cobrado en GHL; se recuperó. No cobres otra vez |
 | **400** | `{ "error": "…" }` | Falta un campo o es inválido. Corrige la petición (reintentar igual no sirve) |
-| **403** | `{ "error": "…" }` | Tu API key no puede cobrar a esa subcuenta |
+| **403** | `{ "error": "…", "code"?: "…" }` | Tu API key no puede cobrar a esa subcuenta. Con `code: "CHARGES_DISABLED"` el administrador ha cortado los cobros de tu app: deja de cobrar y sigue sirviendo o para, según tu producto (el resto de la API sigue funcionando). Ramifica por `code`, no por el texto |
 | **404** | `{ "error": "…" }` | Tarifa inexistente/inactiva, o subcuenta no conectada |
 | **409** | `{ "error": "…", "charge_id": 12 }` | Ese `event_id` tiene un cobro **en curso**. Espera unos segundos y **reintenta con el mismo `event_id`** |
 | **429** | `{ "error": "…" }` | Superaste el límite de peticiones/min. Respeta la cabecera `X-RateLimit-Remaining` y reintenta |
@@ -126,6 +126,10 @@ El importe es `units × price_per_unit`, redondeado a 6 decimales. Divisa: **USD
 2. **Ante `502`, `503`, `429`, timeout o error de red: reintenta con el MISMO `event_id`.** Nunca generes uno
    nuevo "para desatascar": eso sí duplicaría el cobro. La pasarela, antes de reintentar, le pregunta a GHL si el
    intento anterior llegó a cobrarse y solo re-ejecuta si GHL confirma que no.
+   **Esto incluye los cargos que quedaron en `unknown`:** el reconciliador solo los cierra si GHL confirma que
+   cobró; si GHL dice que no existe, **nunca** lo marca fallido (por diseño: la ausencia no es autoritativa). La
+   recuperación es tu reenvío: pasados ≥ 5 minutos, reenvía el mismo `event_id` — es seguro, porque el `POST`
+   reconcilia primero y solo re-ejecuta si GHL confirma que el intento anterior no cobró.
 
 3. **`200` con `idempotent: true` es éxito**, no un fallo. Si tratas todo lo que no sea `201` como error, cobrarás
    de más. Acepta `200` y `201` como "cobrado".
