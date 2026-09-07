@@ -291,6 +291,7 @@ export default function Apps() {
                 <Th>API key</Th>
                 <Th className="text-right">Cobros</Th>
                 <Th className="text-right">Facturado</Th>
+                <Th>Puede cobrar</Th>
                 <Th>Modo prueba</Th>
                 <Th>Estado</Th>
                 <Th></Th>
@@ -306,6 +307,10 @@ export default function Apps() {
                   <Td><code className="text-xs text-ink2">{a.key_prefix}</code></Td>
                   <Td className="text-right tabular-nums">{a.charges_count}</Td>
                   <Td className="text-right tabular-nums">{fmtUsd(a.amount_total)}</Td>
+                  <Td>
+                    <Toggle checked={a.can_charge !== false} onChange={(v) => patch(a, { can_charge: v })} />
+                    {a.can_charge === false && <div className="text-[11px] text-bad mt-1">cobros cortados</div>}
+                  </Td>
                   <Td><Toggle checked={a.test_mode} onChange={(v) => patch(a, { test_mode: v })} /></Td>
                   <Td><Badge status={a.status} /></Td>
                   <Td className="text-right whitespace-nowrap">

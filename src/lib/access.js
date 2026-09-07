@@ -37,6 +37,8 @@ export async function checkAccess(appId, locationId) {
 
 // Estado derivado para el panel: lo que el admin debe ver, no el status crudo
 export function derivedStatus(sub) {
+  // impagada manda sobre "caducada": explica POR QUÉ se le cortó el acceso
+  if (sub.status === 'past_due') return 'past_due'
   if (sub.ends_at && new Date(sub.ends_at).getTime() <= Date.now()) return 'expired'
   if (new Date(sub.starts_at).getTime() > Date.now()) return 'scheduled'
   return sub.status

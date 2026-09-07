@@ -3,7 +3,7 @@ import { Plus, Pencil } from 'lucide-react'
 import { api } from '../api.js'
 import { Card, Button, Input, Modal, Th, Td, Empty, Toggle, Badge } from '../components/ui.jsx'
 
-const EMPTY = { name: '', description: '', price_text: '', app_ids: [], trial_days: 0, duration_months: '', visible: false, active: true }
+const EMPTY = { name: '', description: '', price_text: '', price: '', period_months: 1, app_ids: [], trial_days: 0, duration_months: '', visible: false, active: true }
 
 export default function Plans() {
   const [plans, setPlans] = useState(null)
@@ -24,7 +24,7 @@ export default function Plans() {
     e.preventDefault()
     setBusy(true)
     try {
-      const body = { ...editing, trial_days: Number(editing.trial_days) || 0, duration_months: editing.duration_months ? Number(editing.duration_months) : null }
+      const body = { ...editing, trial_days: Number(editing.trial_days) || 0, duration_months: editing.duration_months ? Number(editing.duration_months) : null, price: editing.price === '' ? null : Number(editing.price), period_months: Number(editing.period_months) || 1 }
       if (editing.id) await api.patch(`/api/admin/plans/${editing.id}`, body)
       else await api.post('/api/admin/plans', body)
       setEditing(null); load()
@@ -69,7 +69,7 @@ export default function Plans() {
                 {(p.app_ids || []).length ? (p.app_ids || []).map(appName).join(', ') : 'sin apps'}
               </div>
               <div className="flex gap-3 mt-3 pt-3 border-t border-border/60">
-                <button className="text-xs text-ink2 hover:text-gold" onClick={() => setEditing({ ...p, duration_months: p.duration_months ?? '', app_ids: p.app_ids || [] })}>
+                <button className="text-xs text-ink2 hover:text-gold" onClick={() => setEditing({ ...p, duration_months: p.duration_months ?? '', price: p.price ?? '', period_months: p.period_months ?? 1, app_ids: p.app_ids || [] })}>
                   <Pencil size={13} className="inline -mt-0.5" /> Editar
                 </button>
                 <button className="text-xs text-bad/80 hover:text-bad" onClick={() => remove(p)}>Eliminar</button>
@@ -83,7 +83,11 @@ export default function Plans() {
         <Modal title={editing.id ? `Editar "${editing.name}"` : 'Nuevo plan'} onClose={() => setEditing(null)}>
           <form onSubmit={save} className="space-y-4">
             <Input label="Nombre" value={editing.name} onChange={set('name')} autoFocus />
-            <Input label="Precio (texto libre, p. ej. «29€/mes»)" value={editing.price_text} onChange={set('price_text')} />
+            <Input label="Precio (texto libre para la tienda, p. ej. «29€/mes»)" value={editing.price_text} onChange={set('price_text')} />
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Precio a cobrar (USD)" type="number" step="0.01" min="0" value={editing.price} onChange={set('price')} hint="lo que se cobra de verdad al renovar" />
+              <Input label="Periodo (meses)" type="number" min="1" value={editing.period_months} onChange={set('period_months')} />
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <Input label="Días de prueba" type="number" min="0" value={editing.trial_days} onChange={set('trial_days')} />
               <Input label="Duración (meses, vacío = sin fin)" type="number" min="1" value={editing.duration_months} onChange={set('duration_months')} />

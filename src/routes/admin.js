@@ -201,7 +201,7 @@ export default async function adminRoutes(app) {
 
   app.patch('/api/admin/apps/:id', guard, async (req, reply) => {
     const id = numOr(req.params.id)
-    const { name, test_mode, status } = req.body || {}
+    const { name, test_mode, status, can_charge } = req.body || {}
     if (status && !['active', 'revoked'].includes(status)) return reply.code(400).send({ error: 'status inválido' })
     // allowed_location_ids: ausente = sin cambios; null = todas; array = solo esas
     let allowedSql = false
@@ -219,9 +219,11 @@ export default async function adminRoutes(app) {
          name = COALESCE($1, name),
          test_mode = COALESCE($2, test_mode),
          status = COALESCE($3, status),
+         can_charge = COALESCE($7, can_charge),
          allowed_location_ids = CASE WHEN $4 THEN $5::jsonb ELSE allowed_location_ids END
        WHERE id=$6 AND system = false RETURNING *`,
-      [name ?? null, typeof test_mode === 'boolean' ? test_mode : null, status ?? null, allowedSql, allowedVal, id]
+      [name ?? null, typeof test_mode === 'boolean' ? test_mode : null, status ?? null, allowedSql, allowedVal, id,
+       typeof can_charge === 'boolean' ? can_charge : null]
     )
     if (!row) return reply.code(404).send({ error: 'App no encontrada' })
     return { app: { ...row, key_hash: undefined } }

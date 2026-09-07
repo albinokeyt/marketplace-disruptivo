@@ -50,6 +50,13 @@ export default async function publicApiRoutes(app) {
         error: `La tarifa "${input.meter.code}" es la de recarga de saldo y no se puede cobrar desde una app: cobraría del wallet sin abonar crédito`,
       })
     }
+    // el admin puede cortar los cobros de una app sin revocarle la key: sigue pudiendo consultar
+    // accesos, tarifas e historial, así que puede avisar al usuario en vez de romperse
+    if (consumer.can_charge === false) {
+      return reply.code(403).send({
+        error: 'Los cobros de esta app están deshabilitados por el administrador del marketplace',
+      })
+    }
 
     const initialStatus = input.testMode ? 'test' : 'pending'
     const { rows: [inserted] } = await q(

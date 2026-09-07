@@ -75,6 +75,13 @@ const STATUS = {
   connected: { label: 'Conectada', cls: 'bg-ok/10 text-ok border-ok/30' },
   disconnected: { label: 'Desconectada', cls: 'bg-mut/10 text-ink2 border-border' },
   error: { label: 'Error', cls: 'bg-bad/10 text-bad border-bad/30' },
+  subscription: { label: 'Suscripción', cls: 'bg-gold/10 text-gold border-gold/30' },
+  trial: { label: 'Prueba', cls: 'bg-gold/10 text-gold border-gold/30' },
+  comped: { label: 'Cortesía', cls: 'bg-ok/10 text-ok border-ok/30' },
+  canceled: { label: 'Cancelada', cls: 'bg-mut/10 text-ink2 border-border' },
+  expired: { label: 'Caducada', cls: 'bg-mut/10 text-ink2 border-border' },
+  scheduled: { label: 'Programada', cls: 'bg-warn/10 text-warn border-warn/30' },
+  past_due: { label: 'Impagada', cls: 'bg-bad/10 text-bad border-bad/40' },
 }
 
 export const Badge = ({ status }) => {

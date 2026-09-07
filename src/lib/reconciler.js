@@ -3,6 +3,7 @@ import { redis } from '../redis.js'
 import { reconcileCharge, ghlRefundState, isAlreadyRefundedError, deleteRejected } from './charges.js'
 import { creditTopupOnce } from './topup.js'
 import { reverseTopupCredit, restoreTopupCredit } from './credits.js'
+import { sweepSubscriptions } from './billing.js'
 import * as ghl from './ghl.js'
 
 // Sana el ledger para cargos que quedaron sin confirmar: 'unknown' (timeout/red al cobrar) o
@@ -188,6 +189,8 @@ export function startReconciler(log, intervalMs = 60_000) {
       await sweepTopupCredits(log)
       await sweepRefunding(log)
       await sweepDiscarded(log)
+      const s = await sweepSubscriptions(log)
+      if (s.checked) log?.info?.(s, 'suscripciones: cobro recurrente')
       if (r.checked) log?.info?.(r, 'reconciliador: barrido')
     } catch (err) {
       log?.error?.({ err: err.message }, 'reconciliador: barrido falló')

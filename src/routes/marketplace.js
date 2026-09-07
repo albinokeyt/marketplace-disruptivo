@@ -123,10 +123,13 @@ export default async function marketplaceRoutes(app) {
     const { rows } = await q(`SELECT * FROM plans ORDER BY created_at DESC`)
     return { plans: rows }
   })
+  // price = lo que se COBRA cada periodo (numérico); price_text sigue siendo el texto de escaparate
   const planBody = (b) => ({
     name: String(b?.name || '').trim(),
     description: b?.description ? String(b.description) : null,
     price_text: b?.price_text ? String(b.price_text) : null,
+    price: b?.price === '' || b?.price == null ? null : Math.max(0, numOr(b.price) ?? 0),
+    period_months: Math.max(1, Math.trunc(numOr(b?.period_months, 1) ?? 1)),
     app_ids: Array.isArray(b?.app_ids) ? b.app_ids.map(Number).filter((n) => Number.isInteger(n)) : [],
     trial_days: Math.max(0, Math.trunc(numOr(b?.trial_days, 0) ?? 0)),
     duration_months: b?.duration_months ? Math.max(1, Math.trunc(numOr(b.duration_months))) : null,
@@ -137,9 +140,9 @@ export default async function marketplaceRoutes(app) {
     const p = planBody(req.body)
     if (!p.name) return reply.code(400).send({ error: 'Falta el nombre del plan' })
     const { rows: [row] } = await q(
-      `INSERT INTO plans (name, description, price_text, app_ids, trial_days, duration_months, visible, active)
-       VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,$8) RETURNING *`,
-      [p.name, p.description, p.price_text, JSON.stringify(p.app_ids), p.trial_days, p.duration_months, p.visible, p.active]
+      `INSERT INTO plans (name, description, price_text, price, period_months, app_ids, trial_days, duration_months, visible, active)
+       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10) RETURNING *`,
+      [p.name, p.description, p.price_text, p.price, p.period_months, JSON.stringify(p.app_ids), p.trial_days, p.duration_months, p.visible, p.active]
     )
     return reply.code(201).send({ plan: row })
   })
@@ -148,8 +151,8 @@ export default async function marketplaceRoutes(app) {
     if (!p.name) return reply.code(400).send({ error: 'Falta el nombre del plan' })
     const { rows: [row] } = await q(
       `UPDATE plans SET name=$1, description=$2, price_text=$3, app_ids=$4::jsonb, trial_days=$5,
-         duration_months=$6, visible=$7, active=$8 WHERE id=$9 RETURNING *`,
-      [p.name, p.description, p.price_text, JSON.stringify(p.app_ids), p.trial_days, p.duration_months, p.visible, p.active, numOr(req.params.id)]
+         duration_months=$6, visible=$7, active=$8, price=$10, period_months=$11 WHERE id=$9 RETURNING *`,
+      [p.name, p.description, p.price_text, JSON.stringify(p.app_ids), p.trial_days, p.duration_months, p.visible, p.active, numOr(req.params.id), p.price, p.period_months]
     )
     if (!row) return reply.code(404).send({ error: 'Plan no encontrado' })
     return { plan: row }
@@ -201,10 +204,27 @@ export default async function marketplaceRoutes(app) {
       if (months === null) return reply.code(400).send({ error: 'months debe ser un entero >= 1' })
       endsAt = addMonths(new Date(), months)
     }
+    // COBRO RECURRENTE: si auto_renew y hay precio, el marketplace lo cobra solo cada period_months.
+    // El precio se hereda del plan salvo que se indique otro (descuentos, precios heredados).
+    let price = b.price === '' || b.price == null ? null : Math.max(0, numOr(b.price) ?? 0)
+    let periodMonths = b.period_months != null ? Math.max(1, Math.trunc(numOr(b.period_months, 1) ?? 1)) : null
+    if (planId) {
+      const { rows: [plan] } = await q('SELECT price, period_months FROM plans WHERE id=$1', [planId])
+      if (plan) {
+        if (price === null) price = numOr(plan.price)
+        if (periodMonths === null) periodMonths = plan.period_months || 1
+      }
+    }
+    periodMonths = periodMonths || 1
+    const autoRenew = Boolean(b.auto_renew) && price > 0
+    // charge_now = cobrar el primer periodo ya; si no, se cobra cuando venza el acceso actual
+    const nextChargeAt = autoRenew ? (b.charge_now ? new Date() : (endsAt || new Date())) : null
+
     const { rows: [row] } = await q(
-      `INSERT INTO subscriptions (location_id, app_id, plan_id, status, ends_at, notes)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [locationId, appId, planId, status, endsAt, b.notes ? String(b.notes).slice(0, 500) : null]
+      `INSERT INTO subscriptions (location_id, app_id, plan_id, status, ends_at, notes, price, period_months, auto_renew, next_charge_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [locationId, appId, planId, status, endsAt, b.notes ? String(b.notes).slice(0, 500) : null,
+       price, periodMonths, autoRenew, nextChargeAt]
     )
     return reply.code(201).send({ subscription: { ...row, derived: derivedStatus(row) } })
   })
@@ -223,14 +243,38 @@ export default async function marketplaceRoutes(app) {
       const base = cur.ends_at && new Date(cur.ends_at) > new Date() ? new Date(cur.ends_at) : new Date()
       setEnds = true; endsAt = addMonths(base, months)
     }
+    // cobro recurrente: precio, periodo y renovación automática se pueden ajustar en caliente
+    const price = 'price' in b ? (b.price === '' || b.price == null ? null : Math.max(0, numOr(b.price) ?? 0)) : undefined
+    const periodMonths = 'period_months' in b ? Math.max(1, Math.trunc(numOr(b.period_months, 1) ?? 1)) : undefined
+    const autoRenew = typeof b.auto_renew === 'boolean' ? b.auto_renew : undefined
+    // al (re)activar la renovación se programa el próximo cobro; al quitarla, se desprograma
+    const effPrice = price === undefined ? numOr(cur.price) : price
+    let setNext = false
+    let nextChargeAt = null
+    if (autoRenew === true && effPrice > 0) {
+      setNext = true
+      const base = setEnds ? endsAt : cur.ends_at
+      nextChargeAt = cur.next_charge_at && !setEnds ? cur.next_charge_at : (b.charge_now ? new Date() : (base || new Date()))
+    } else if (autoRenew === false) {
+      setNext = true
+      nextChargeAt = null
+    }
+
     const { rows: [row] } = await q(
       `UPDATE subscriptions SET
          status = COALESCE($1, status),
          ends_at = CASE WHEN $2 THEN $3 ELSE ends_at END,
          notes = COALESCE($4, notes),
+         price = COALESCE($6, price),
+         period_months = COALESCE($7, period_months),
+         auto_renew = COALESCE($8, auto_renew),
+         next_charge_at = CASE WHEN $9 THEN $10 ELSE next_charge_at END,
+         failed_charges = CASE WHEN $9 AND $10 IS NOT NULL THEN 0 ELSE failed_charges END,
          updated_at = now()
        WHERE id=$5 RETURNING *`,
-      [status, setEnds, endsAt ?? null, b.notes ?? null, id]
+      [status, setEnds, endsAt ?? null, b.notes ?? null, id,
+       price === undefined ? null : price, periodMonths ?? null, autoRenew === undefined ? null : autoRenew,
+       setNext, nextChargeAt]
     )
     return { subscription: { ...row, derived: derivedStatus(row) } }
   })
