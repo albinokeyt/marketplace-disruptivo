@@ -39,6 +39,13 @@ export async function chargeSubscriptionOnce(sub, cfg, log) {
 
   const { rows: [meter] } = await q('SELECT * FROM meters WHERE code=$1 AND active=true', [cfg.meter_code])
   if (!meter) return { skipped: true, reason: `falta la tarifa "${cfg.meter_code}"` }
+  // La tarifa de suscripciones admite dos formas, y el precio del plan encaja en las dos:
+  //   · dynamic → 1 unidad al precio del plan (limitado por el min/max del meter en GHL)
+  //   · fixed 1.00 → tantas unidades como dólares (sin techo de precio; el patrón de las recargas)
+  const fixedUnit = meter.price_type === 'fixed' && Math.abs((numOr(meter.default_price) ?? 0) - 1) < 1e-9
+  if (!fixedUnit && meter.price_type !== 'dynamic') {
+    return { skipped: true, reason: `la tarifa "${meter.code}" debe ser dinámica o fija a 1.00 por unidad` }
+  }
   if (meter.price_type === 'dynamic') {
     const min = numOr(meter.min_price)
     const max = numOr(meter.max_price)
@@ -65,15 +72,17 @@ export async function chargeSubscriptionOnce(sub, cfg, log) {
   const testMode = (await isGlobalTestMode()) || conn.test_mode || app.test_mode
   const eventId = `sub-${sub.id}-${periodKey(sub.next_charge_at)}`
   const description = `Suscripción ${sub.plan_name || sub.app_name || ''}`.trim() + ` · ${sub.period_months} mes(es)`
-  const pricePerUnit = meter.price_type === 'dynamic' ? price : (numOr(meter.default_price) ?? price)
+  const units = fixedUnit ? price : 1
+  const pricePerUnit = fixedUnit ? 1 : price
 
   const { rows: [inserted] } = await q(
     `INSERT INTO charges (app_id, meter_id, connection_id, location_id, event_id, units, price_per_unit,
                           amount, status, description, kind, paid_with, subscription_id)
-     VALUES ($1,$2,$3,$4,$5,1,$6,$6,$7,$8,'subscription','wallet',$9)
+     VALUES ($1,$2,$3,$4,$5,$10,$11,$6,$7,$8,'subscription','wallet',$9)
      ON CONFLICT (app_id, event_id) DO NOTHING
      RETURNING *`,
-    [app.id, meter.id, conn.id, sub.location_id, eventId, price, testMode ? 'test' : 'pending', description, sub.id]
+    [app.id, meter.id, conn.id, sub.location_id, eventId, price, testMode ? 'test' : 'pending', description, sub.id,
+     units, pricePerUnit]
   )
 
   let row = inserted
@@ -86,8 +95,8 @@ export async function chargeSubscriptionOnce(sub, cfg, log) {
     if (['pending', 'unknown'].includes(existing.status)) return { skipped: true, reason: 'cobro en verificación' }
     // 'failed': se reclama la fila y se reintenta contra GHL con el mismo event_id
     const { rows: [claimed] } = await q(
-      `UPDATE charges SET status='pending', error=NULL, price_per_unit=$2, amount=$2, updated_at=now()
-       WHERE id=$1 AND status='failed' RETURNING *`, [existing.id, price])
+      `UPDATE charges SET status='pending', error=NULL, units=$3, price_per_unit=$4, amount=$2, updated_at=now()
+       WHERE id=$1 AND status='failed' RETURNING *`, [existing.id, price, units, pricePerUnit])
     if (!claimed) return { skipped: true, reason: 'el cobro cambió de estado' }
     row = claimed
   }
@@ -106,7 +115,7 @@ export async function chargeSubscriptionOnce(sub, cfg, log) {
 
   try {
     const input = {
-      meter, conn, units: 1, pricePerUnit, amount: price,
+      meter, conn, units, pricePerUnit, amount: price,
       description, userId: null, eventTime: null,
     }
     const updated = await executeCharge(row.id, input, log)
