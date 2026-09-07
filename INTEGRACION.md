@@ -198,6 +198,21 @@ preguntar a GHL y `wallet_has_funds` viene a `null`. Errores: `404` no conectada
 **No reserva nada:** el saldo lo comparten todas las apps del marketplace, así que entre tu comprobación y tu
 cobro otro puede haberlo consumido. Úsalo como semáforo previo, nunca como garantía.
 
+### Si vendes por suscripción, no cobras tú
+
+Hay dos formas de cobrar, y puedes usar las dos a la vez:
+
+| | Cobro **por uso** | Cobro **por suscripción** |
+|---|---|---|
+| Quién cobra | **Tu app**, con `POST /api/v1/charges` | **El marketplace**, solo, cada periodo |
+| Cuándo | Cada vez que el cliente consume | Cada N meses, en la fecha de renovación |
+| Qué implementas | La llamada de cobro | **Nada**: solo `GET /api/v1/access/:locationId` |
+
+Si tu app es de plan mensual (o anual), **no implementes cobros**: el administrador crea la suscripción con su
+precio y renovación automática, el marketplace la cobra del saldo del cliente y le extiende el acceso solo. Tu app
+únicamente pregunta si hay acceso y sirve o corta. Si el cobro falla varias veces, la suscripción pasa a impagada
+y `access` te devolverá `false` sin que tengas que hacer nada.
+
 ### ¿Esta subcuenta tiene acceso/suscripción a MI app?
 
 ```http

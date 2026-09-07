@@ -17,7 +17,13 @@ El centro de apps del **Departamento Disruptivo**: **tienda pública** de tus ap
 - **Tienda** (`/tienda`, pública): vitrina de apps con media, estrellas/reseñas, precio, badges «Nuevo»/«Próximamente» y botón «Instalar en GoHighLevel».
 - **Wallet**: cobra del wallet de GHL por uso (meters), reconciliación, reembolsos. (ver «API para tus apps»)
 - **Accesos y suscripciones**: da acceso de una subcuenta a una app o plan, por meses o indefinido, de pago/prueba/cortesía. Tus apps preguntan con `GET /api/v1/access/<locationId>`.
-- **Planes**: bundles de apps con días de prueba y duración.
+- **Planes**: bundles de apps con días de prueba, duración y **precio real** por periodo.
+- **Cobro híbrido**: cada app puede cobrar **por uso** (llama a `/api/v1/charges` cuando consume, como el setter IA)
+  o **por suscripción** (el marketplace cobra solo el precio del plan cada N meses y extiende el acceso). Ambos
+  salen del mismo saldo: primero el crédito interno, y si no llega, el wallet de GHL. Si el cobro recurrente falla,
+  se reintenta a diario y, agotados los intentos, la suscripción pasa a **impagada** y `GET /api/v1/access` deja de
+  dar acceso — sin tocar el código de la app. En **Apps** hay un interruptor **«Puede cobrar»** para habilitar o
+  cortar los cobros de una app concreta sin revocarle la API key.
 - **Usuarios y portal**: creas clientes con **login propio** (email+contraseña, aunque no estén en GHL), les asignas subcuentas, y cada uno entra a **su portal** donde ve **su** consumo (gasto por app, histórico), sus accesos activos y los avisos. Tú (admin) ves el de todos.
 - **Créditos y recargas**: saldo interno por subcuenta. Tú puedes **regalarlo** (promo, compensación) y el cliente puede **recargarlo desde su wallet de GHL** («Recargar saldo» en su portal: se le cobra N USD del wallet vía un meter de recarga y recibe N de crédito). Los cobros consumen el crédito **antes** de tocar el wallet; si no cubre el importe, ese cobro va al wallet. Ledger auditable de cada movimiento.
 - **Avisos**: comunicados internos, banners en la tienda y en el portal del cliente.
