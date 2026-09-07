@@ -17,7 +17,7 @@ Tu app  ──POST /api/v1/charges──▶  Marketplace Disruptivo  ──▶  
 
 | Dato | Cómo lo consigues |
 |---|---|
-| **URL base** | Te la da el administrador. Hoy: `https://apps-propias-marketplace.f7m8z2.easypanel.host` |
+| **URL base** | Te la da el administrador. `https://marketplace.escaladoacelerado.es` |
 | **API key** | Te la entrega el administrador. Formato `dw_…`. **Solo se muestra una vez.** |
 | **Código de tarifa** (`meter`) | Te lo da el administrador, o lo consultas en `GET /api/v1/meters` |
 | **`location_id`** | El id de la subcuenta de GoHighLevel a la que cobras. Lo tienes en tu propio OAuth |
@@ -146,7 +146,7 @@ El importe es `units × price_per_unit`, redondeado a 6 decimales. Divisa: **USD
 ### Reintento correcto (JavaScript)
 
 ```js
-const BASE = 'https://apps-propias-marketplace.f7m8z2.easypanel.host'
+const BASE = 'https://marketplace.escaladoacelerado.es'
 const KEY  = process.env.MD_API_KEY
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
