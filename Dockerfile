@@ -11,6 +11,7 @@ ENV NODE_ENV=production
 COPY package*.json ./
 RUN npm ci --omit=dev
 COPY src/ ./src/
+COPY docs/ ./docs/
 COPY --from=webbuild /app/web/dist ./web/dist
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

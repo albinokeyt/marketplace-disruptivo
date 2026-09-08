@@ -51,6 +51,13 @@ if (existsSync(distDir)) {
   app.get('/', async () => ({ ok: true, service: 'marketplace-disruptivo', panel: 'sin compilar (web/dist no existe)' }))
 }
 
+// guía de integración pública para los desarrolladores de apps: /docs/guia-integracion.html (atajo: /guia)
+const docsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'docs')
+if (existsSync(docsDir)) {
+  await app.register(fastifyStatic, { root: docsDir, prefix: '/docs/', decorateReply: false })
+  app.get('/guia', async (req, reply) => reply.redirect('/docs/guia-integracion.html'))
+}
+
 app.setErrorHandler((err, req, reply) => {
   req.log.error(err)
   const status = err.statusCode && err.statusCode >= 400 ? err.statusCode : 500
