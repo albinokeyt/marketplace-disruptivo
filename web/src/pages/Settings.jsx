@@ -128,6 +128,14 @@ export default function Settings() {
               value={data.custom_page_url || ''}
               hint="La URL que GHL cargará embebida. Es la raíz del panel."
             />
+            <Input
+              label="ID de la Custom Page en GHL"
+              value={data.ghl_app.custom_page_id || ''}
+              onChange={setGhl('custom_page_id')}
+              placeholder="6a9c73161281715fe62d0ed8"
+              hint="Al abrir el marketplace dentro de una subcuenta, la URL acaba en …/custom-page-link/<id>. Con él, las apps de terceros pueden enlazar al portal del cliente (campo portal_url de la API)."
+              className="lg:col-span-2"
+            />
             <label className="block lg:col-span-2">
               <span className="block text-xs text-ink2 mb-1.5">Company IDs de agencia autorizados (uno por línea o separados por comas)</span>
               <textarea

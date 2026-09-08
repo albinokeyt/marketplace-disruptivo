@@ -248,8 +248,28 @@ GET /api/v1/access/:locationId
 | `grace` | `true` = renovación impagada en reintento: el cliente sigue dentro, avísale. Lo normal es `false` |
 | `ends_at` | Fin del acceso vigente (`null` = sin caducidad). En gracia, es el fin de la gracia |
 | `reason` | Solo sin acceso: `past_due` (impagada), `expired` (caducó o agotó la gracia), `canceled`, `scheduled` (empieza más adelante) o `none` (nunca tuvo suscripción) |
+| `connected` | `true` si la subcuenta tiene instalado Marketplace Disruptivo (sin él no puede pagar con su saldo) |
+| `portal_url` | Enlace al portal del cliente dentro de su subcuenta de GoHighLevel (contrata planes, recarga saldo, ve sus accesos). `null` si no está conectada |
 
 Ramifica por `access`/`grace`/`reason`, nunca por textos.
+
+### Si tu app ya tiene su propio cobro (Stripe, etc.): deja pagar con el marketplace
+
+Puedes mantener tu pasarela para el resto de tus clientes y, para los del marketplace, dejar que paguen con su saldo:
+
+1. **`access: true` = plan activo.** No muestres «sin plan» ni tu pasarela a una subcuenta con acceso del marketplace,
+   ni le apliques los límites de tu plan gratuito. Ese cliente lo cobra el marketplace.
+2. **Ofrece el pago con el marketplace**: lista tus planes con `GET /api/v1/plans` y enlaza a `portal_url`
+   (lo devuelve `/access`). Ahí el cliente pulsa «Contratar con mi saldo»: se le cobra el primer periodo al momento
+   (crédito interno → wallet de GoHighLevel) y el acceso se activa en el acto. Si `connected` es `false`, la
+   subcuenta no tiene instalado Marketplace Disruptivo: pídele que lo solicite a su agencia.
+3. **Al volver, vuelve a consultar `/access`** (o pon un botón «Ya he pagado, comprobar» que ignore tu caché).
+
+```http
+GET /api/v1/plans
+→ { "plans": [ { "id": 3, "name": "VSL Boost · Pro", "description": "…", "price": 19, "currency": "USD",
+                "period_months": 1, "price_text": "19 USD/mes", "trial_days": 0 } ] }
+```
 
 ### Historial de tus cobros
 

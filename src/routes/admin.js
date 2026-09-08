@@ -491,6 +491,7 @@ export default async function adminRoutes(app) {
         company_id: ghlApp.company_id || '',
         pit_token: ghlApp.pit_token ? '••••••' + String(ghlApp.pit_token).slice(-4) : '',
         sso_secret: ghlApp.sso_secret ? '••••••' + String(ghlApp.sso_secret).slice(-4) : '',
+        custom_page_id: ghlApp.custom_page_id || '',
       },
       sso_admins: { company_ids: admins.company_ids || [], emails: admins.emails || [] },
       test_mode: Boolean(await getSetting('test_mode')),
@@ -521,6 +522,7 @@ export default async function adminRoutes(app) {
         company_id: String(inp.company_id ?? current.company_id ?? '').trim(),
         pit_token: keep(inp.pit_token, current.pit_token),
         sso_secret: keep(inp.sso_secret, current.sso_secret),
+        custom_page_id: String(inp.custom_page_id ?? current.custom_page_id ?? '').trim(),
       })
     }
     if (body.sso_admins && typeof body.sso_admins === 'object') {

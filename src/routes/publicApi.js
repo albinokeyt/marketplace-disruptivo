@@ -5,7 +5,20 @@ import { resolveChargeInput, executeCharge, reconcileCharge, refundCharge, publi
 import { checkAccess } from '../lib/access.js'
 import { trySpendCredit, getBalance } from '../lib/credits.js'
 import { getTopupConfig } from '../lib/topup.js'
+import { getGhlConfig } from '../lib/settings.js'
 import * as ghl from '../lib/ghl.js'
+
+// Para que las apps enlacen al portal del cliente dentro de GHL («gestiona tu suscripción», «paga con tu saldo»)
+// sin conocer nuestros ids: la Custom Page del marketplace tiene el mismo id en todas las subcuentas donde está instalado
+async function portalInfo(locationId) {
+  const { rows: [conn] } = await q('SELECT status FROM connections WHERE location_id=$1', [locationId])
+  const connected = Boolean(conn && conn.status === 'connected')
+  const pageId = String((await getGhlConfig()).custom_page_id || '').trim()
+  return {
+    connected,
+    portal_url: connected && pageId ? `https://app.gohighlevel.com/v2/location/${locationId}/custom-page-link/${pageId}` : null,
+  }
+}
 
 const RATE_PER_MIN = numOr(process.env.API_RATE_PER_MIN, 600) ?? 600
 
@@ -153,6 +166,15 @@ export default async function publicApiRoutes(app) {
     }
   })
 
+  // Planes contratables que incluyen ESTA app (para que la app los muestre y mande al cliente a su portal)
+  app.get('/api/v1/plans', async (req) => {
+    const { rows } = await q(
+      `SELECT id, name, description, price, period_months, price_text, trial_days
+       FROM plans WHERE visible AND active AND price > 0 AND app_ids @> $1::jsonb ORDER BY price ASC, id ASC`,
+      [JSON.stringify([req.consumerApp.id])])
+    return { plans: rows.map((p) => ({ ...p, price: numOr(p.price), currency: 'USD' })) }
+  })
+
   // ¿Tiene saldo el wallet de esta subcuenta?
   app.get('/api/v1/locations/:locationId/has-funds', async (req, reply) => {
     if (!locationAllowed(req.consumerApp, req.params.locationId)) {
@@ -250,6 +272,6 @@ export default async function publicApiRoutes(app) {
       return reply.code(403).send({ code: 'LOCATION_NOT_ALLOWED', error: 'Esta API key no está autorizada para esa subcuenta' })
     }
     const access = await checkAccess(req.consumerApp.id, locationId)
-    return { ...access, credit: await getBalance(locationId) }
+    return { ...access, credit: await getBalance(locationId), ...(await portalInfo(locationId)) }
   })
 }

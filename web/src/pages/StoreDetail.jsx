@@ -116,6 +116,9 @@ export default function StoreDetail() {
                     </div>
                   ))}
                 </div>
+                <p className="text-xs text-mut mt-3">
+                  Los planes se contratan con tu saldo desde el portal de Marketplace Disruptivo, dentro de tu subcuenta de GoHighLevel.
+                </p>
               </section>
             )}
 

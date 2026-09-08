@@ -20,6 +20,9 @@ export default function UserPortal({ me, onLogout, asLocation = null, onPickLoca
   const [topupAmt, setTopupAmt] = useState('')
   const [topupBusy, setTopupBusy] = useState(false)
   const [allConnections, setAllConnections] = useState([])
+  const [plans, setPlans] = useState([])
+  const [buyLoc, setBuyLoc] = useState('')
+  const [buyBusy, setBuyBusy] = useState(null)
 
   const preview = Boolean(asLocation)
   const qs = preview ? `?location_id=${encodeURIComponent(asLocation)}` : ''
@@ -32,6 +35,7 @@ export default function UserPortal({ me, onLogout, asLocation = null, onPickLoca
     loadUsage()
     api.get(`/api/me/access${qs}`).then((d) => setAccess(d.access)).catch(() => setAccess([]))
     api.get('/api/me/notices').then((d) => setNotices(d.notices)).catch(() => {})
+    api.get('/api/me/plans').then((d) => setPlans(d.plans || [])).catch(() => {})
     api.get('/api/me/topup-config').then(setTopupCfg).catch(() => {})
     api.get(`/api/me${qs}`).then((d) => {
       const locs = d.locations || []
@@ -42,6 +46,23 @@ export default function UserPortal({ me, onLogout, asLocation = null, onPickLoca
   }, [asLocation])
 
   const previewName = locations[0]?.name || asLocation
+
+  // contratar un plan con el saldo: se cobra el primer periodo ahora y el acceso se activa al momento
+  const buyLocation = buyLoc || locations[0]?.location_id || ''
+  const owned = (p) => (access || []).some((s) =>
+    (!buyLocation || s.location_id === buyLocation) && (s.plan_name === p.name || p.apps.some((a) => a.name === s.app_name)))
+  const buyPlan = async (p) => {
+    if (!buyLocation) return alert('No hay ninguna subcuenta seleccionada')
+    const periodo = p.period_months === 1 ? 'mes' : `${p.period_months} meses`
+    if (!window.confirm(`Se cobrarán ${Number(p.price).toFixed(2)} USD de tu saldo (o de tu wallet de GoHighLevel) por «${p.name}», y se renovará cada ${periodo}. ¿Continuar?`)) return
+    setBuyBusy(p.id)
+    try {
+      const r = await api.post('/api/me/subscriptions', { location_id: buyLocation, plan_id: p.id })
+      alert(`Listo: ${p.name} activo hasta el ${fmtDate(r.subscription.ends_at)}${r.test_mode ? ' (modo prueba, sin cobro real)' : ''}`)
+      api.get(`/api/me/access${qs}`).then((d) => setAccess(d.access)).catch(() => {})
+      loadUsage()
+    } catch (err) { alert(err.message) } finally { setBuyBusy(null) }
+  }
 
   // Recarga: cobro REAL al wallet de GHL de la subcuenta → crédito interno al instante
   const topupNum = Number(topupAmt)
@@ -212,6 +233,49 @@ export default function UserPortal({ me, onLogout, asLocation = null, onPickLoca
             )}
           </Card>
         </div>
+
+        {plans.length > 0 && (
+          <>
+            <div className="flex items-center justify-between mt-8 mb-3 gap-3 flex-wrap">
+              <h2 className="text-lg font-bold">Planes disponibles</h2>
+              {locations.length > 1 && (
+                <select
+                  className="bg-bg border border-border rounded-xl px-3 py-2 text-sm outline-none focus:border-gold/60"
+                  value={buyLocation} onChange={(e) => setBuyLoc(e.target.value)}
+                >
+                  {locations.map((l) => <option key={l.location_id} value={l.location_id}>{l.name}</option>)}
+                </select>
+              )}
+            </div>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {plans.map((p) => {
+                const ya = owned(p)
+                return (
+                  <Card key={p.id} className="lift flex flex-col">
+                    <div className="flex items-center gap-2">
+                      {p.apps[0]?.icon_url && <img src={p.apps[0].icon_url} alt="" className="w-8 h-8 rounded-lg object-cover" />}
+                      <div className="font-semibold">{p.name}</div>
+                    </div>
+                    <div className="text-[11px] text-mut mt-1">{p.apps.map((a) => a.name).join(' + ')}</div>
+                    <div className="text-gold text-lg font-bold mt-2 tabular-nums">
+                      {Number(p.price).toFixed(2)} USD <span className="text-xs text-ink2 font-normal">/ {p.period_months === 1 ? 'mes' : `${p.period_months} meses`}</span>
+                    </div>
+                    {p.description && <p className="text-xs text-ink2 mt-2 leading-relaxed flex-1">{p.description}</p>}
+                    <Button
+                      className="mt-3 w-full" disabled={preview || ya || buyBusy === p.id} onClick={() => buyPlan(p)}
+                      title={preview ? 'Solo lectura en «Ver como cliente»' : ya ? 'Ya tienes acceso a esta app' : undefined}
+                    >
+                      {ya ? 'Ya lo tienes' : buyBusy === p.id ? 'Cobrando…' : 'Contratar con mi saldo'}
+                    </Button>
+                  </Card>
+                )
+              })}
+            </div>
+            <p className="text-[11px] text-mut mt-2">
+              Se cobra el primer periodo ahora (primero tu crédito, después tu wallet de GoHighLevel) y se renueva solo. Para cancelar, pídeselo a tu agencia.
+            </p>
+          </>
+        )}
 
         <h2 className="text-lg font-bold mt-8 mb-3">Mis accesos</h2>
         {access && access.length === 0 && <Card><Empty>No tienes accesos activos. Explora la <a href="/tienda" className="text-gold">tienda</a>.</Empty></Card>}

@@ -5,6 +5,7 @@ import { checkAccess } from '../lib/access.js'
 import { rateLimit } from '../lib/ratelimit.js'
 import { publicCharge } from '../lib/charges.js'
 import { createTopup, getTopupConfig } from '../lib/topup.js'
+import { purchasePlan } from '../lib/billing.js'
 
 const publicUser = (u) => ({
   id: u.id, email: u.email, name: u.name, role: u.role,
@@ -181,6 +182,44 @@ export default async function userRoutes(app) {
 
   // ---------------- RECARGAR SALDO desde el wallet de GHL ----------------
   // El cliente (o el admin en su nombre) paga X del wallet de GHL y recibe X de crédito interno.
+  // Planes contratables desde el portal (visibles, activos y con precio), con las apps que incluyen
+  app.get('/api/me/plans', { preHandler: requireAuth }, async () => {
+    const { rows: plans } = await q(
+      `SELECT id, name, description, price, period_months, price_text, trial_days, app_ids
+       FROM plans WHERE visible AND active AND price > 0 ORDER BY price ASC, id ASC`)
+    const { rows: apps } = await q(`SELECT id, name, slug, icon_url FROM apps WHERE status='active' AND system=false`)
+    const byId = new Map(apps.map((a) => [a.id, a]))
+    return {
+      plans: plans.map((p) => ({
+        ...p,
+        price: numOr(p.price),
+        apps: (Array.isArray(p.app_ids) ? p.app_ids : []).map(Number).map((id) => byId.get(id)).filter(Boolean),
+      })),
+    }
+  })
+
+  // Contratar un plan con el saldo: cobra el primer periodo ya y activa el acceso (renovación automática)
+  app.post('/api/me/subscriptions', { preHandler: requireAuth }, async (req, reply) => {
+    const locationId = String(req.body?.location_id || '').trim()
+    const planId = numOr(req.body?.plan_id)
+    if (!locationId || !planId) return reply.code(400).send({ error: 'Faltan location_id o plan_id' })
+    const scope = await scopeFor(req.session, previewOf(req))
+    if (scope.preview) {
+      return reply.code(403).send({ error: '«Ver como cliente» es solo lectura: para activar un plan en su nombre usa Suscripciones' })
+    }
+    if (!scope.all && !scope.locs.includes(locationId)) {
+      return reply.code(403).send({ error: 'No tienes acceso a esa subcuenta' })
+    }
+    const rl = await rateLimit(`buy:${req.session.userId}`, 3, 60)
+    if (!rl.ok) return reply.code(429).send({ error: 'Demasiados intentos seguidos; espera un minuto' })
+    try {
+      const r = await purchasePlan({ locationId, planId, userId: String(req.session.userId), log: req.log })
+      return reply.code(201).send(r)
+    } catch (err) {
+      return reply.code(err.statusCode || 502).send({ error: err.message })
+    }
+  })
+
   app.get('/api/me/topup-config', { preHandler: requireAuth }, async () => {
     const cfg = await getTopupConfig()
     const { rows: [m] } = await q('SELECT 1 FROM meters WHERE code=$1 AND active=true', [cfg.meter_code])

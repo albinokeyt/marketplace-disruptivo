@@ -966,10 +966,34 @@ X-Api-Key: dw_tu_api_key</pre>
               <tr><td class="nw"><code>grace</code></td><td><code>true</code> = renovación impagada en reintento: el cliente sigue dentro, avísale. Lo normal es <code>false</code>.</td></tr>
               <tr><td class="nw"><code>ends_at</code></td><td>Fin del acceso vigente (<code>null</code> = sin caducidad). En gracia, es el fin de la gracia.</td></tr>
               <tr><td class="nw"><code>reason</code></td><td>Solo sin acceso: <code>past_due</code> (impagada), <code>expired</code> (caducó o agotó la gracia), <code>canceled</code>, <code>scheduled</code> (empieza más adelante) o <code>none</code> (nunca tuvo suscripción).</td></tr>
+              <tr><td class="nw"><code>connected</code></td><td><code>true</code> si la subcuenta tiene instalado Marketplace Disruptivo (sin él no puede pagar con su saldo).</td></tr>
+              <tr><td class="nw"><code>portal_url</code></td><td>Enlace al portal del cliente dentro de su subcuenta de GoHighLevel (contrata planes, recarga saldo, ve sus accesos). <code>null</code> si no está conectada.</td></tr>
             </tbody>
           </table>
         </div>
         <p>Ramifica por <code>access</code>/<code>grace</code>/<code>reason</code>, nunca por textos.</p>
+
+        <h3>Si tu app ya tiene su propio cobro (Stripe, etc.): deja pagar con el marketplace</h3>
+        <p>Puedes mantener tu pasarela para el resto de tus clientes y, para los del marketplace, dejar que paguen
+          con su saldo:</p>
+        <ol>
+          <li><strong><code>access: true</code> = plan activo.</strong> No muestres «sin plan» ni tu pasarela a una
+            subcuenta con acceso del marketplace, ni le apliques los límites de tu plan gratuito. Ese cliente lo cobra
+            el marketplace.</li>
+          <li><strong>Ofrece el pago con el marketplace:</strong> lista tus planes con <code>GET /api/v1/plans</code> y
+            enlaza a <code>portal_url</code> (lo devuelve <code>/access</code>). Ahí el cliente pulsa «Contratar con mi
+            saldo»: se le cobra el primer periodo al momento (crédito interno → wallet de GoHighLevel) y el acceso se
+            activa en el acto. Si <code>connected</code> es <code>false</code>, la subcuenta no tiene instalado
+            Marketplace Disruptivo: pídele que lo solicite a su agencia.</li>
+          <li><strong>Al volver, vuelve a consultar <code>/access</code></strong> (o pon un botón «Ya he pagado,
+            comprobar» que ignore tu caché).</li>
+        </ol>
+        <div class="code">
+          <div class="code-head"><span>GET /api/v1/plans</span><button class="copy" type="button">copiar</button></div>
+<pre>{ <span class="k">"plans"</span>: [ { <span class="k">"id"</span>: 3, <span class="k">"name"</span>: <span class="s">"VSL Boost · Pro"</span>, <span class="k">"description"</span>: <span class="s">"…"</span>,
+             <span class="k">"price"</span>: 19, <span class="k">"currency"</span>: <span class="s">"USD"</span>, <span class="k">"period_months"</span>: 1,
+             <span class="k">"price_text"</span>: <span class="s">"19 USD/mes"</span>, <span class="k">"trial_days"</span>: 0 } ] }</pre>
+        </div>
 
         <h3>Historial y reembolso</h3>
         <div class="code">

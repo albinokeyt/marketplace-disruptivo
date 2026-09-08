@@ -1,9 +1,13 @@
 import { q, numOr } from '../db.js'
 import { getSetting, isGlobalTestMode } from './settings.js'
-import { executeCharge } from './charges.js'
-import { trySpendCredit } from './credits.js'
+import { executeCharge, publicCharge } from './charges.js'
+import { trySpendCredit, getBalance } from './credits.js'
 import { getSystemApp } from './topup.js'
 import { normalizeBillingConfig, addMonths, afterFailure, LEAD_HOURS } from './billingRules.js'
+import { checkAccess } from './access.js'
+import { hasFunds } from './ghl.js'
+
+const fail = (statusCode, message) => { const e = new Error(message); e.statusCode = statusCode; return e }
 
 // COBRO RECURRENTE de suscripciones (el otro modelo es el cobro por uso de /api/v1/charges).
 // Cada periodo se cobra UNA vez: el event_id es determinista (sub-<id>-<inicio del periodo>) y la
@@ -172,4 +176,63 @@ export async function sweepSubscriptions(log) {
     }
   }
   return { checked: rows.length, charged, failed }
+}
+
+// COMPRA desde el portal del cliente: crea la suscripción y cobra el PRIMER periodo ahora mismo
+// (crédito interno → wallet de GHL). Sin cobro no hay acceso: si falla, la suscripción queda cancelada
+// con el motivo y el cliente recibe un error claro. Después se renueva sola cada period_months.
+export async function purchasePlan({ locationId, planId, userId = null, log }) {
+  const cfg = await getBillingConfig()
+  if (!cfg.enabled) throw fail(503, 'La contratación de planes está desactivada temporalmente')
+  const { rows: [plan] } = await q('SELECT * FROM plans WHERE id=$1 AND active=true AND visible=true', [planId])
+  if (!plan) throw fail(404, 'Plan no disponible')
+  const price = numOr(plan.price) ?? 0
+  if (price <= 0) throw fail(400, 'Este plan no se contrata desde el portal: pídeselo a tu agencia')
+  const appIds = (Array.isArray(plan.app_ids) ? plan.app_ids : []).map(Number).filter(Boolean)
+  if (!appIds.length) throw fail(400, 'El plan no incluye ninguna app')
+  const { rows: apps } = await q('SELECT id, name, status FROM apps WHERE id = ANY($1)', [appIds])
+  if (apps.length !== appIds.length || apps.some((a) => a.status !== 'active')) throw fail(409, 'Alguna app del plan no está disponible')
+  const { rows: [conn] } = await q('SELECT * FROM connections WHERE location_id=$1', [locationId])
+  if (!conn || conn.status !== 'connected') throw fail(409, 'Esta subcuenta no tiene instalado Marketplace Disruptivo: pídeselo a tu agencia para poder pagar con tu saldo')
+  for (const a of apps) {
+    const acc = await checkAccess(a.id, locationId)
+    if (acc.access) throw fail(409, `Ya tienes acceso a ${a.name}${acc.ends_at ? ' hasta el ' + new Date(acc.ends_at).toLocaleDateString('es-ES') : ''}`)
+  }
+  // fondos ANTES de crear nada: crédito interno o, si no llega, el wallet de GHL
+  const credit = await getBalance(locationId)
+  if (credit < price) {
+    let wallet = false
+    try { wallet = Boolean((await hasFunds(conn.id))?.hasFunds) } catch { wallet = false }
+    if (!wallet) throw fail(402, `Saldo insuficiente para ${price.toFixed(2)} USD: recarga tu saldo o tu wallet de GoHighLevel y vuelve a intentarlo`)
+  }
+  const period = Math.max(1, plan.period_months || 1)
+  const now = new Date()
+  // un plan de UNA app se atribuye a esa app (así lo ve en su historial); un pack lo firma la app del sistema
+  const appId = appIds.length === 1 ? appIds[0] : null
+  const { rows: [sub] } = await q(
+    `INSERT INTO subscriptions (location_id, app_id, plan_id, status, starts_at, ends_at, notes, price, period_months, auto_renew, next_charge_at)
+     VALUES ($1,$2,$3,'active',$4,$4,$5,$6,$7,true,$4) RETURNING *`,
+    [locationId, appId, plan.id, now, `Contratado desde el portal${userId ? ` (${userId})` : ''}`, price, period]
+  )
+  const r = await chargeSubscriptionOnce({ ...sub, plan_name: plan.name, app_name: apps.length === 1 ? apps[0].name : null }, cfg, log)
+  if (r.charged || r.already) {
+    const next = addMonths(now, period)
+    const { rows: [updated] } = await q(
+      `UPDATE subscriptions SET status='active', ends_at=$2, next_charge_at=$2, failed_charges=0, last_error=NULL, retry_at=NULL,
+              updated_at=now() WHERE id=$1 RETURNING *`, [sub.id, next])
+    log?.info?.({ subId: sub.id, locationId, planId: plan.id, price, hasta: next, test: Boolean(r.test_mode) }, 'plan contratado desde el portal')
+    return {
+      subscription: { ...updated, plan_name: plan.name, apps: apps.map((a) => a.name) },
+      charge: r.charge ? publicCharge(r.charge) : null,
+      test_mode: Boolean(r.test_mode),
+    }
+  }
+  const motivo = String(r.reason || r.error || 'cobro no completado')
+  await q(
+    `UPDATE subscriptions SET status='canceled', ends_at=$2, auto_renew=false, next_charge_at=NULL, last_error=$3,
+            notes = notes || ' · cobro fallido', updated_at=now() WHERE id=$1`, [sub.id, now, motivo.slice(0, 500)])
+  log?.warn?.({ subId: sub.id, locationId, planId: plan.id, motivo }, 'contratación fallida')
+  throw fail(402, /insufficient|fondos|funds|saldo|balance/i.test(motivo)
+    ? `No se pudo cobrar ${price.toFixed(2)} USD: saldo insuficiente. Recarga tu saldo o tu wallet de GoHighLevel y vuelve a intentarlo`
+    : `No se pudo cobrar el plan: ${motivo}`)
 }
