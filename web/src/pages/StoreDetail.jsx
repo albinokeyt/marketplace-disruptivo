@@ -53,7 +53,8 @@ export default function StoreDetail() {
               {/* ficha */}
               <div className="lg:col-span-2 space-y-4">
                 <div>
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {data.app.icon_url && <img src={data.app.icon_url} alt="" className="w-12 h-12 rounded-xl object-cover shrink-0" />}
                     <h1 className="text-2xl font-bold text-gradient-gold">{data.app.name}</h1>
                     {data.app.badge === 'new' && <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-gold text-bg">Nuevo</span>}
                     {data.app.badge === 'coming_soon' && <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border border-gold/40 text-gold">Próximamente</span>}
@@ -77,6 +78,11 @@ export default function StoreDetail() {
                   </a>
                 ) : (
                   <div className="text-sm text-mut">Instalación no disponible todavía.</div>
+                )}
+                {data.app.support_email && (
+                  <div className="text-sm text-ink2">
+                    Soporte: <a href={`mailto:${data.app.support_email}`} className="text-gold hover:underline">{data.app.support_email}</a>
+                  </div>
                 )}
                 {data.app.features?.length > 0 && (
                   <ul className="space-y-1.5 pt-2">

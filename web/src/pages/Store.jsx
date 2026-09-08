@@ -25,7 +25,10 @@ function AppCard({ a }) {
       </div>
       <div className="p-4 flex flex-col gap-2 flex-1">
         <div className="flex items-start justify-between gap-2">
-          <h3 className="font-semibold leading-tight">{a.name}</h3>
+          <div className="flex items-center gap-2 min-w-0">
+            {a.icon_url && <img src={a.icon_url} alt="" className="w-8 h-8 rounded-lg shrink-0 object-cover" />}
+            <h3 className="font-semibold leading-tight">{a.name}</h3>
+          </div>
           {a.price_text && <span className="text-xs text-gold whitespace-nowrap font-medium">{a.price_text}</span>}
         </div>
         {a.tagline && <p className="text-xs text-ink2 leading-relaxed line-clamp-2">{a.tagline}</p>}

@@ -19,6 +19,8 @@ const publicApp = (a) => ({
   install_url: a.install_url,
   price_text: a.price_text,
   badge: a.badge || null, // 'new' | 'coming_soon' | null
+  icon_url: a.icon_url || null,
+  support_email: a.support_email || null,
   media: a.media || [],
   features: a.features || [],
   rating: a.rating ? Number(Number(a.rating).toFixed(1)) : null,
@@ -72,6 +74,14 @@ export default async function marketplaceRoutes(app) {
     // badge: '' o null lo borra; solo 'new'/'coming_soon' válidos
     let badge; let setBadge = false
     if ('badge' in b) { setBadge = true; badge = ['new', 'coming_soon'].includes(b.badge) ? b.badge : null }
+    // icono y correo de soporte: ausentes = sin cambios; '' o null = borrar
+    let icon; let setIcon = false
+    if ('icon_url' in b) { setIcon = true; icon = String(b.icon_url || '').trim() || null }
+    let support; let setSupport = false
+    if ('support_email' in b) {
+      setSupport = true; support = String(b.support_email || '').trim().toLowerCase() || null
+      if (support && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(support)) return reply.code(400).send({ error: 'Correo de soporte inválido' })
+    }
     const { rows: [row] } = await q(
       `UPDATE apps SET
          slug = COALESCE($1, slug),
@@ -82,7 +92,9 @@ export default async function marketplaceRoutes(app) {
          media = COALESCE($6::jsonb, media),
          features = COALESCE($7::jsonb, features),
          visible = COALESCE($8, visible),
-         badge = CASE WHEN $10 THEN $11 ELSE badge END
+         badge = CASE WHEN $10 THEN $11 ELSE badge END,
+         icon_url = CASE WHEN $12 THEN $13 ELSE icon_url END,
+         support_email = CASE WHEN $14 THEN $15 ELSE support_email END
        WHERE id=$9 RETURNING *`,
       [
         b.slug ? slugify(b.slug, id) : (cur.slug || slugify(cur.name, id)),
@@ -91,6 +103,8 @@ export default async function marketplaceRoutes(app) {
         features ? JSON.stringify(features) : null,
         typeof b.visible === 'boolean' ? b.visible : null, id,
         setBadge, badge ?? null,
+        setIcon, icon ?? null,
+        setSupport, support ?? null,
       ]
     )
     return { app: { ...row, key_hash: undefined } }
