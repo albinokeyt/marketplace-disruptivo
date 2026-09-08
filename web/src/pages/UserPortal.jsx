@@ -121,6 +121,7 @@ export default function UserPortal({ me, onLogout, asLocation = null, onPickLoca
           </div>
           <div className="flex items-center gap-3">
             <a href="/tienda" target="_blank" rel="noreferrer" className="text-sm text-gold/90 hover:text-gold inline-flex items-center gap-1.5"><ExternalLink size={14} /> Tienda</a>
+            <a href="/docs/manuales/manual-marketplace-cliente.pdf" target="_blank" rel="noreferrer" className="text-sm text-ink2 hover:text-ink inline-flex items-center gap-1.5" title="Guía del portal (PDF)"><ExternalLink size={14} /> Guía</a>
             {!preview && <button onClick={onLogout} className="text-sm text-ink2 hover:text-ink inline-flex items-center gap-1.5"><LogOut size={14} /> Salir</button>}
           </div>
         </header>

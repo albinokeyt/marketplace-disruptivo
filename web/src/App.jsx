@@ -147,6 +147,15 @@ function AdminApp({ location }) {
           >
             <ExternalLink size={15} /> Ver tienda
           </a>
+          <a
+            href="/docs/manuales/manual-marketplace-admin.pdf"
+            target="_blank"
+            rel="noreferrer"
+            className="mx-3 mt-1 flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm text-ink2 hover:bg-card2 hover:text-ink"
+            title="Manual del administrador de Marketplace Disruptivo (PDF)"
+          >
+            <ExternalLink size={15} /> Manual del panel (PDF)
+          </a>
           <button
             onClick={logout}
             className="m-3 flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-ink2 hover:bg-card2 hover:text-ink"
