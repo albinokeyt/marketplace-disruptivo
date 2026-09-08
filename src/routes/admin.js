@@ -6,6 +6,8 @@ import { rateLimit } from '../lib/ratelimit.js'
 import { createSession, destroySession, requireAdmin, requireAuth } from '../lib/session.js'
 import { getSetting, setSetting, getGhlConfig } from '../lib/settings.js'
 import { getTopupConfig, creditTopupOnce } from '../lib/topup.js'
+import { getBillingConfig } from '../lib/billing.js'
+import { normalizeBillingConfig } from '../lib/billingRules.js'
 import { refundCharge, reconcileCharge, publicCharge } from '../lib/charges.js'
 import { UNKNOWN_GRACE_MS } from '../lib/reconciler.js'
 import { decryptGhlSso, ssoAuthorized } from '../lib/sso.js'
@@ -496,6 +498,7 @@ export default async function adminRoutes(app) {
       redirect_uri: config.appBaseUrl ? `${config.appBaseUrl}/api/oauth/callback` : '(define APP_BASE_URL)',
       custom_page_url: config.appBaseUrl ? `${config.appBaseUrl}/` : '(define APP_BASE_URL)',
       topup: await getTopupConfig(),
+      subscription_billing: await getBillingConfig(),
     }
   })
 
@@ -547,6 +550,13 @@ export default async function adminRoutes(app) {
         presets: presets.length ? presets : [10, 25, 50, 100].filter((n) => n >= min && n <= max),
         min, max,
       })
+    }
+    if (body.subscription_billing && typeof body.subscription_billing === 'object') {
+      const cfg = normalizeBillingConfig(body.subscription_billing)
+      if (!cfg.meter_code) return reply.code(400).send({ error: 'Falta el código de la tarifa de suscripciones' })
+      if (cfg.grace_days > 60) return reply.code(400).send({ error: 'La gracia no puede superar 60 días' })
+      if (cfg.max_retries > 90) return reply.code(400).send({ error: 'Como mucho 90 reintentos' })
+      await setSetting('subscription_billing', cfg)
     }
     if (typeof body.test_mode === 'boolean') await setSetting('test_mode', body.test_mode)
     return { ok: true }

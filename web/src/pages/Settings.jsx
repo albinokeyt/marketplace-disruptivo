@@ -26,6 +26,7 @@ export default function Settings() {
   const setGhl = (k) => (e) => setData((d) => ({ ...d, ghl_app: { ...d.ghl_app, [k]: e.target.value } }))
   // recargas: los presets se editan como texto crudo y se convierten al guardar (no en cada tecla)
   const setTopup = (k, v) => setData((d) => ({ ...d, topup: { ...(d.topup || {}), [k]: v } }))
+  const setBilling = (k, v) => setData((d) => ({ ...d, subscription_billing: { ...(d.subscription_billing || {}), [k]: v } }))
   const setSso = (k) => (e) => setSsoText((s) => ({ ...s, [k]: e.target.value }))
   const toList = (txt) => txt.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean)
 
@@ -44,7 +45,9 @@ export default function Settings() {
         min: Number(t.min) || 5,
         max: Number(t.max) || 5000,
       }
-      await api.put('/api/admin/settings', { ghl_app: data.ghl_app, sso_admins, test_mode: data.test_mode, topup })
+      await api.put('/api/admin/settings', {
+        ghl_app: data.ghl_app, sso_admins, test_mode: data.test_mode, topup, subscription_billing: data.subscription_billing,
+      })
       setSaved(true)
       load()
       setTimeout(() => setSaved(false), 2500)
@@ -171,6 +174,44 @@ export default function Settings() {
             />
             <Input label="Mínimo (USD)" type="number" min="1" value={data.topup?.min ?? 5} onChange={(e) => setTopup('min', e.target.value)} />
             <Input label="Máximo (USD)" type="number" min="1" value={data.topup?.max ?? 5000} onChange={(e) => setTopup('max', e.target.value)} />
+          </div>
+        </Card>
+
+        <Card>
+          <h2 className="text-sm font-semibold mb-1">Cobro de suscripciones</h2>
+          <p className="text-xs text-ink2 mb-4 leading-relaxed">
+            Las suscripciones con precio y renovación automática se cobran solas cada periodo (primero el crédito
+            interno, después el wallet), hasta 1 hora antes de vencer. Si el cobro falla, la suscripción entra en
+            <b> gracia</b>: el cliente conserva el acceso los días indicados mientras se reintenta cada 24 h; agotada
+            la gracia se le corta y, agotados los reintentos, queda <b>impagada</b>. Necesita una tarifa dinámica o
+            fija a 1.00 USD por unidad registrada en Tarifas con el código de abajo.
+          </p>
+          <Toggle
+            checked={(data.subscription_billing?.enabled) !== false}
+            onChange={(v) => setBilling('enabled', v)}
+            label="Cobro automático de suscripciones activado"
+          />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
+            <Input
+              label="Código de la tarifa de suscripciones"
+              value={data.subscription_billing?.meter_code ?? 'suscripcion'}
+              onChange={(e) => setBilling('meter_code', e.target.value)}
+            />
+            <Input
+              label="Días de gracia tras un impago"
+              type="number"
+              min="0"
+              value={data.subscription_billing?.grace_days ?? 3}
+              onChange={(e) => setBilling('grace_days', e.target.value)}
+              hint="0 = sin gracia: se corta al vencer."
+            />
+            <Input
+              label="Reintentos diarios antes de impagada"
+              type="number"
+              min="1"
+              value={data.subscription_billing?.max_retries ?? 10}
+              onChange={(e) => setBilling('max_retries', e.target.value)}
+            />
           </div>
         </Card>
 

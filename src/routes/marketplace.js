@@ -234,6 +234,16 @@ export default async function marketplaceRoutes(app) {
     const { rows: [cur] } = await q('SELECT * FROM subscriptions WHERE id=$1', [id])
     if (!cur) return reply.code(404).send({ error: 'Suscripción no encontrada' })
     const status = b.status && ['active', 'trial', 'comped', 'canceled'].includes(b.status) ? b.status : null
+    // plan_id: ausente = sin cambios; null/'' = quitar el plan; número = debe existir
+    let setPlan = false; let planId = null
+    if ('plan_id' in b) {
+      setPlan = true
+      planId = b.plan_id === null || b.plan_id === '' ? null : numOr(b.plan_id)
+      if (planId !== null) {
+        const { rows: [plan] } = await q('SELECT id FROM plans WHERE id=$1', [planId])
+        if (!plan) return reply.code(400).send({ error: 'Plan no encontrado' })
+      }
+    }
     let endsAt; let setEnds = false
     if ('ends_at' in b) { setEnds = true; endsAt = b.ends_at ? new Date(b.ends_at) : null; if (endsAt && Number.isNaN(endsAt.getTime())) return reply.code(400).send({ error: 'ends_at inválido' }) }
     if ('months' in b && b.months != null && b.months !== '') {
@@ -270,11 +280,13 @@ export default async function marketplaceRoutes(app) {
          auto_renew = COALESCE($8, auto_renew),
          next_charge_at = CASE WHEN $9 THEN $10 ELSE next_charge_at END,
          failed_charges = CASE WHEN $9 AND $10 IS NOT NULL THEN 0 ELSE failed_charges END,
+         retry_at = CASE WHEN $9 THEN NULL ELSE retry_at END,
+         plan_id = CASE WHEN $11 THEN $12 ELSE plan_id END,
          updated_at = now()
        WHERE id=$5 RETURNING *`,
       [status, setEnds, endsAt ?? null, b.notes ?? null, id,
        price === undefined ? null : price, periodMonths ?? null, autoRenew === undefined ? null : autoRenew,
-       setNext, nextChargeAt]
+       setNext, nextChargeAt, setPlan, planId]
     )
     return { subscription: { ...row, derived: derivedStatus(row) } }
   })

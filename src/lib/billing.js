@@ -3,30 +3,16 @@ import { getSetting, isGlobalTestMode } from './settings.js'
 import { executeCharge } from './charges.js'
 import { trySpendCredit } from './credits.js'
 import { getSystemApp } from './topup.js'
+import { normalizeBillingConfig, addMonths, afterFailure, LEAD_HOURS } from './billingRules.js'
 
 // COBRO RECURRENTE de suscripciones (el otro modelo es el cobro por uso de /api/v1/charges).
 // Cada periodo se cobra UNA vez: el event_id es determinista (sub-<id>-<inicio del periodo>) y la
 // idempotencia de charges(app_id, event_id) impide que un reintento o dos réplicas cobren dos veces.
-const DEFAULTS = { enabled: true, meter_code: 'suscripcion', max_retries: 10 }
-const RETRY_HOURS = 24
+// Las reglas puras (gracia, reintentos, meses de calendario) viven en billingRules.js.
+export { addMonths }
 
 export async function getBillingConfig() {
-  const s = (await getSetting('subscription_billing')) || {}
-  return {
-    enabled: s.enabled === undefined ? DEFAULTS.enabled : Boolean(s.enabled),
-    meter_code: String(s.meter_code || DEFAULTS.meter_code),
-    max_retries: Math.max(1, numOr(s.max_retries) ?? DEFAULTS.max_retries),
-  }
-}
-
-// suma meses de CALENDARIO (no 30 días fijos): el 31 de enero + 1 mes cae en el último día de febrero
-export const addMonths = (base, n) => {
-  const d = new Date(base.getTime())
-  const day = d.getDate()
-  d.setDate(1)
-  d.setMonth(d.getMonth() + n)
-  d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()))
-  return d
+  return normalizeBillingConfig((await getSetting('subscription_billing')) || {})
 }
 
 const periodKey = (date) => new Date(date).toISOString().slice(0, 10)
@@ -140,7 +126,8 @@ export async function sweepSubscriptions(log) {
        AND s.status IN ('active','trial','past_due')
        AND s.price > 0
        AND s.next_charge_at IS NOT NULL
-       AND s.next_charge_at <= now()
+       AND s.next_charge_at <= now() + interval '${LEAD_HOURS} hours'
+       AND (s.retry_at IS NULL OR s.retry_at <= now())
      ORDER BY s.next_charge_at ASC
      LIMIT 25`
   )
@@ -159,26 +146,27 @@ export async function sweepSubscriptions(log) {
         await q(
           `UPDATE subscriptions
              SET status='active', ends_at=$2, next_charge_at=$2, failed_charges=0, last_error=NULL,
-                 updated_at=now()
+                 retry_at=NULL, updated_at=now()
            WHERE id=$1`, [sub.id, next])
         charged++
         log?.info?.({ subId: sub.id, hasta: next }, 'suscripción cobrada y renovada')
         continue
       }
 
-      // no se pudo cobrar: reintento diario y, agotados los intentos, se corta el acceso
+      // no se pudo cobrar: gracia al primer fallo, reintento diario con el MISMO event_id y, agotados los
+      // intentos, impagada (las reglas exactas, en afterFailure)
       const fails = (sub.failed_charges || 0) + 1
       const motivo = r.reason || r.error || 'cobro no completado'
-      const agotado = fails >= cfg.max_retries
+      const next = afterFailure({ sub, fails, cfg })
       await q(
         `UPDATE subscriptions
-           SET failed_charges=$2, last_error=$3, updated_at=now(),
-               status = CASE WHEN $4 THEN 'past_due' ELSE status END,
-               next_charge_at = CASE WHEN $4 THEN NULL ELSE now() + interval '${RETRY_HOURS} hours' END
+           SET failed_charges=$2, last_error=$3, status=$4, ends_at=$5, next_charge_at=$6, retry_at=$7,
+               updated_at=now()
          WHERE id=$1`,
-        [sub.id, fails, String(motivo).slice(0, 500), agotado])
+        [sub.id, fails, String(motivo).slice(0, 500), next.status, next.ends_at, next.next_charge_at, next.retry_at])
       failed++
-      log?.warn?.({ subId: sub.id, intentos: fails, motivo, agotado }, 'suscripción sin cobrar')
+      log?.warn?.({ subId: sub.id, intentos: fails, motivo, agotado: next.exhausted, acceso_hasta: next.ends_at },
+        'suscripción sin cobrar')
     } catch (err) {
       log?.error?.({ err: err.message, subId: sub.id }, 'barrido de suscripciones: fallo inesperado')
     }

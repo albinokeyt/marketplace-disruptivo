@@ -925,24 +925,51 @@ X-Api-Key: dw_tu_api_key</pre>
         </div>
         <p>Si tu app es de plan mensual (o anual), <strong>no implementes cobros</strong>: el administrador crea la
           suscripción con su precio y renovación automática, el marketplace la cobra del saldo del cliente y le
-          extiende el acceso solo. Tu app únicamente pregunta si hay acceso y sirve o corta. Si el cobro falla
-          varias veces, la suscripción pasa a impagada y <code>access</code> te devolverá <code>false</code> sin
-          que tengas que hacer nada.</p>
+          extiende el acceso solo. Tu app únicamente pregunta si hay acceso y sirve o corta.</p>
+        <p><strong>Qué pasa cuando no se puede cobrar la renovación</strong> (sin saldo, subcuenta desconectada…):</p>
+        <ol>
+          <li>La renovación se intenta hasta <strong>1 hora antes</strong> de que venza el periodo: si va bien, el
+            acceso se extiende antes de caducar y nunca ves un <code>access: false</code> entre el vencimiento y el
+            cobro.</li>
+          <li>Si falla, la suscripción entra en <strong>gracia</strong> (3 días por defecto; lo fija el
+            administrador): <code>access</code> sigue siendo <code>true</code>, pero llega <code>"grace": true</code>
+            y <code>ends_at</code> pasa a ser el fin de la gracia. Es el momento de avisar al cliente («recarga tu
+            saldo»). El marketplace reintenta cada 24 h.</li>
+          <li>Agotada la gracia, <code>access</code> pasa a <code>false</code> con <code>"reason": "expired"</code>.
+            Si un reintento posterior cobra, el acceso vuelve solo. Agotados los reintentos (10 días por defecto),
+            queda <strong>impagada</strong>: <code>"reason": "past_due"</code> hasta que el administrador la
+            reactive.</li>
+        </ol>
+        <p>Las pruebas gratuitas (<code>trial</code>) que no consiguen convertirse en pago no tienen gracia: se
+          cortan al vencer.</p>
 
         <h3>Control de acceso, si vendes por suscripción</h3>
         <div class="code">
           <div class="code-head"><span>GET /api/v1/access/:locationId</span><button class="copy" type="button">copiar</button></div>
-<pre>{ <span class="k">"access"</span>: true, <span class="k">"via"</span>: <span class="s">"plan"</span>, <span class="k">"plan"</span>: <span class="s">"Pack Disruptivo"</span>,
-  <span class="k">"status"</span>: <span class="s">"active"</span>, <span class="k">"starts_at"</span>: <span class="s">"…"</span>, <span class="k">"ends_at"</span>: null,
-  <span class="k">"subscription_id"</span>: 3, <span class="k">"credit"</span>: 12.5 }
+<pre>{ <span class="k">"access"</span>: true, <span class="k">"via"</span>: <span class="s">"app"</span>, <span class="k">"plan"</span>: <span class="s">"Emails Disruptivo · Pro"</span>,
+  <span class="k">"status"</span>: <span class="s">"active"</span>, <span class="k">"grace"</span>: false,
+  <span class="k">"starts_at"</span>: <span class="s">"…"</span>, <span class="k">"ends_at"</span>: <span class="s">"2026-11-07T12:00:00.000Z"</span>,
+  <span class="k">"subscription_id"</span>: 15, <span class="k">"credit"</span>: 12.5 }
 
 <span class="c">// sin acceso:</span>
-{ <span class="k">"access"</span>: false, <span class="k">"credit"</span>: 0 }</pre>
+{ <span class="k">"access"</span>: false, <span class="k">"reason"</span>: <span class="s">"past_due"</span>, <span class="k">"credit"</span>: 0 }</pre>
         </div>
         <p>El administrador concede o corta el acceso desde su panel y tu app se entera sola: no tienes que tocar
-          código para dar una prueba gratis o cortar a quien no paga. <code>status</code> puede ser
-          <code>trial</code>, <code>active</code> o <code>comped</code> (cortesía);
-          <code>ends_at: null</code> significa sin caducidad.</p>
+          código para dar una prueba gratis o cortar a quien no paga.</p>
+        <div class="tw">
+          <table>
+            <thead><tr><th>Campo</th><th>Qué es</th></tr></thead>
+            <tbody>
+              <tr><td class="nw"><code>via</code></td><td>Cómo llega el acceso: <code>app</code> (suscripción directa a tu app) o <code>plan</code> (un pack que la incluye).</td></tr>
+              <tr><td class="nw"><code>plan</code></td><td>Nombre del plan, si lo tiene (<code>null</code> p. ej. en una prueba sin plan). Muéstralo tal cual.</td></tr>
+              <tr><td class="nw"><code>status</code></td><td><code>trial</code>, <code>active</code> o <code>comped</code> (cortesía).</td></tr>
+              <tr><td class="nw"><code>grace</code></td><td><code>true</code> = renovación impagada en reintento: el cliente sigue dentro, avísale. Lo normal es <code>false</code>.</td></tr>
+              <tr><td class="nw"><code>ends_at</code></td><td>Fin del acceso vigente (<code>null</code> = sin caducidad). En gracia, es el fin de la gracia.</td></tr>
+              <tr><td class="nw"><code>reason</code></td><td>Solo sin acceso: <code>past_due</code> (impagada), <code>expired</code> (caducó o agotó la gracia), <code>canceled</code>, <code>scheduled</code> (empieza más adelante) o <code>none</code> (nunca tuvo suscripción).</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Ramifica por <code>access</code>/<code>grace</code>/<code>reason</code>, nunca por textos.</p>
 
         <h3>Historial y reembolso</h3>
         <div class="code">

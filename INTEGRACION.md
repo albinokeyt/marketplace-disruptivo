@@ -214,20 +214,42 @@ Hay dos formas de cobrar, y puedes usar las dos a la vez:
 
 Si tu app es de plan mensual (o anual), **no implementes cobros**: el administrador crea la suscripción con su
 precio y renovación automática, el marketplace la cobra del saldo del cliente y le extiende el acceso solo. Tu app
-únicamente pregunta si hay acceso y sirve o corta. Si el cobro falla varias veces, la suscripción pasa a impagada
-y `access` te devolverá `false` sin que tengas que hacer nada.
+únicamente pregunta si hay acceso y sirve o corta.
+
+**Qué pasa cuando no se puede cobrar la renovación** (sin saldo, subcuenta desconectada…):
+
+1. La renovación se intenta hasta **1 hora antes** de que venza el periodo: si va bien, el acceso se extiende antes
+   de caducar y nunca ves un `access: false` entre el vencimiento y el cobro.
+2. Si falla, la suscripción entra en **gracia** (3 días por defecto; lo fija el administrador): `access` sigue siendo
+   `true`, pero llega `"grace": true` y `ends_at` pasa a ser el fin de la gracia. Es el momento de avisar al cliente
+   («recarga tu saldo»). El marketplace reintenta cada 24 h.
+3. Agotada la gracia, `access` pasa a `false` con `"reason": "expired"`. Si un reintento posterior cobra, el acceso
+   vuelve solo. Agotados los reintentos (10 días por defecto), queda **impagada**: `"reason": "past_due"` hasta que
+   el administrador la reactive.
+
+Las pruebas gratuitas (`trial`) que no consiguen convertirse en pago no tienen gracia: se cortan al vencer.
 
 ### ¿Esta subcuenta tiene acceso/suscripción a MI app?
 
 ```http
 GET /api/v1/access/:locationId
-→ { "access": true, "via": "plan", "plan": "Pack Disruptivo", "status": "active",
-    "starts_at": "…", "ends_at": null, "subscription_id": 3, "credit": 12.5 }
-→ { "access": false, "credit": 0 }
+→ { "access": true, "via": "app", "plan": "Emails Disruptivo · Pro", "status": "active", "grace": false,
+    "starts_at": "…", "ends_at": "2026-11-07T12:00:00.000Z", "subscription_id": 15, "credit": 12.5 }
+→ { "access": false, "reason": "past_due", "credit": 0 }
 ```
 
 Úsalo si vendes por suscripción: el administrador da o corta el acceso desde el panel y tu app se entera sola.
-`status` puede ser `trial`, `active` o `comped` (cortesía). `ends_at: null` = sin caducidad.
+
+| Campo | Qué es |
+|---|---|
+| `via` | Cómo llega el acceso: `app` (suscripción directa a tu app) o `plan` (un pack que la incluye) |
+| `plan` | Nombre del plan, si lo tiene (`null` p. ej. en una prueba sin plan). Muéstralo tal cual |
+| `status` | `trial`, `active` o `comped` (cortesía) |
+| `grace` | `true` = renovación impagada en reintento: el cliente sigue dentro, avísale. Lo normal es `false` |
+| `ends_at` | Fin del acceso vigente (`null` = sin caducidad). En gracia, es el fin de la gracia |
+| `reason` | Solo sin acceso: `past_due` (impagada), `expired` (caducó o agotó la gracia), `canceled`, `scheduled` (empieza más adelante) o `none` (nunca tuvo suscripción) |
+
+Ramifica por `access`/`grace`/`reason`, nunca por textos.
 
 ### Historial de tus cobros
 

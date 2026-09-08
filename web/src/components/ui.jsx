@@ -82,6 +82,7 @@ const STATUS = {
   expired: { label: 'Caducada', cls: 'bg-mut/10 text-ink2 border-border' },
   scheduled: { label: 'Programada', cls: 'bg-warn/10 text-warn border-warn/30' },
   past_due: { label: 'Impagada', cls: 'bg-bad/10 text-bad border-bad/40' },
+  grace: { label: 'Impago · en gracia', cls: 'bg-warn/10 text-warn border-warn/30' },
 }
 
 export const Badge = ({ status }) => {

@@ -5,7 +5,7 @@ import { Card, Button, Input, Select, Modal, Badge, Th, Td, Empty, Toggle } from
 
 const STATUS_BADGE = {
   active: 'active', trial: 'test', comped: 'connected', scheduled: 'pending', expired: 'disconnected',
-  canceled: 'revoked', past_due: 'past_due',
+  canceled: 'revoked', past_due: 'past_due', grace: 'grace',
 }
 const DerivedBadge = ({ s }) => <Badge status={STATUS_BADGE[s] || 'disconnected'} />
 
@@ -91,7 +91,7 @@ export default function Subscriptions() {
                   <Td className="text-ink2">{s.app_name || <span className="text-gold">plan: {s.plan_name}</span>}</Td>
                   <Td>
                     <DerivedBadge s={s.derived} />
-                    {s.derived === 'past_due' && s.last_error && (
+                    {['past_due', 'grace'].includes(s.derived) && s.last_error && (
                       <div className="text-[11px] text-bad max-w-56 truncate" title={s.last_error}>{s.last_error}</div>
                     )}
                   </Td>
