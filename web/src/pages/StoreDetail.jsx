@@ -79,6 +79,16 @@ export default function StoreDetail() {
                 ) : (
                   <div className="text-sm text-mut">Instalación no disponible todavía.</div>
                 )}
+                {data.app.manual_url && (
+                  <a
+                    href={data.app.manual_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-gold/40 text-gold font-medium hover:bg-gold/10 transition-colors"
+                  >
+                    Descargar manual de uso (PDF)
+                  </a>
+                )}
                 {data.app.support_email && (
                   <div className="text-sm text-ink2">
                     Soporte: <a href={`mailto:${data.app.support_email}`} className="text-gold hover:underline">{data.app.support_email}</a>

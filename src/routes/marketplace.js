@@ -21,6 +21,7 @@ const publicApp = (a) => ({
   badge: a.badge || null, // 'new' | 'coming_soon' | null
   icon_url: a.icon_url || null,
   support_email: a.support_email || null,
+  manual_url: a.manual_url || null,
   media: a.media || [],
   features: a.features || [],
   rating: a.rating ? Number(Number(a.rating).toFixed(1)) : null,
@@ -77,6 +78,8 @@ export default async function marketplaceRoutes(app) {
     // icono y correo de soporte: ausentes = sin cambios; '' o null = borrar
     let icon; let setIcon = false
     if ('icon_url' in b) { setIcon = true; icon = String(b.icon_url || '').trim() || null }
+    let manual; let setManual = false
+    if ('manual_url' in b) { setManual = true; manual = String(b.manual_url || '').trim() || null }
     let support; let setSupport = false
     if ('support_email' in b) {
       setSupport = true; support = String(b.support_email || '').trim().toLowerCase() || null
@@ -94,7 +97,8 @@ export default async function marketplaceRoutes(app) {
          visible = COALESCE($8, visible),
          badge = CASE WHEN $10 THEN $11 ELSE badge END,
          icon_url = CASE WHEN $12 THEN $13 ELSE icon_url END,
-         support_email = CASE WHEN $14 THEN $15 ELSE support_email END
+         support_email = CASE WHEN $14 THEN $15 ELSE support_email END,
+         manual_url = CASE WHEN $16 THEN $17 ELSE manual_url END
        WHERE id=$9 RETURNING *`,
       [
         b.slug ? slugify(b.slug, id) : (cur.slug || slugify(cur.name, id)),
@@ -105,6 +109,7 @@ export default async function marketplaceRoutes(app) {
         setBadge, badge ?? null,
         setIcon, icon ?? null,
         setSupport, support ?? null,
+        setManual, manual ?? null,
       ]
     )
     return { app: { ...row, key_hash: undefined } }

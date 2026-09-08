@@ -161,7 +161,7 @@ export default async function userRoutes(app) {
     const where = scope.all ? '' : 'WHERE s.location_id = ANY($1)'
     const params = scope.all ? [] : [scope.locs]
     const { rows } = await q(
-      `SELECT s.location_id, s.status, s.starts_at, s.ends_at, a.name AS app_name, p.name AS plan_name,
+      `SELECT s.location_id, s.status, s.starts_at, s.ends_at, a.name AS app_name, a.manual_url, a.icon_url, p.name AS plan_name,
               COALESCE(NULLIF(k.alias,''), k.name, s.location_id) AS location_name
        FROM subscriptions s
        LEFT JOIN apps a ON a.id=s.app_id

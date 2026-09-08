@@ -292,6 +292,11 @@ export default function UserPortal({ me, onLogout, asLocation = null, onPickLoca
                   <Badge status={STATUS_BADGE[s.status] || 'active'} />
                   <span className="text-[11px] text-ink2">{s.ends_at ? `hasta ${fmtDate(s.ends_at)}` : 'sin caducidad'}</span>
                 </div>
+                {s.manual_url && (
+                  <a href={s.manual_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs text-gold hover:underline">
+                    <ExternalLink size={12} /> Manual de uso (PDF)
+                  </a>
+                )}
               </Card>
             ))}
           </div>

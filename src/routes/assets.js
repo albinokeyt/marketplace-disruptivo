@@ -7,6 +7,7 @@ import { config } from '../config.js'
 const ALLOWED = {
   'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif',
   'video/mp4': 'mp4', 'video/webm': 'webm',
+  'application/pdf': 'pdf',
 }
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/

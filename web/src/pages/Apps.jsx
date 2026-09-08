@@ -7,7 +7,7 @@ function ListingModal({ app, onClose, onSaved }) {
   const [f, setF] = useState({
     tagline: app.tagline || '', price_text: app.price_text || '', install_url: app.install_url || '',
     description: app.description || '', slug: app.slug || '', badge: app.badge || '',
-    icon_url: app.icon_url || '', support_email: app.support_email || '',
+    icon_url: app.icon_url || '', support_email: app.support_email || '', manual_url: app.manual_url || '',
     media: Array.isArray(app.media) ? app.media : [], visible: Boolean(app.visible),
     featuresText: (Array.isArray(app.features) ? app.features : []).join('\n'),
   })
@@ -55,13 +55,28 @@ function ListingModal({ app, onClose, onSaved }) {
     } catch (err) { alert(err.message) } finally { setUploading(false) }
   }
 
+  // el manual (PDF) también se sube al almacén de archivos y va a su propio campo
+  const uploadManual = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setUploading(true)
+    try {
+      const fd = new FormData(); fd.append('file', file)
+      const res = await fetch('/api/admin/uploads', { method: 'POST', body: fd, credentials: 'same-origin' })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(d.error || `Error ${res.status}`)
+      setF((s) => ({ ...s, manual_url: d.url }))
+    } catch (err) { alert(err.message) } finally { setUploading(false) }
+  }
+
   const save = async () => {
     setBusy(true)
     try {
       await api.patch(`/api/admin/apps/${app.id}/listing`, {
         tagline: f.tagline, price_text: f.price_text, install_url: f.install_url, description: f.description,
         slug: f.slug || undefined, visible: f.visible, badge: f.badge || null,
-        icon_url: f.icon_url.trim() || null, support_email: f.support_email.trim() || null,
+        icon_url: f.icon_url.trim() || null, support_email: f.support_email.trim() || null, manual_url: f.manual_url.trim() || null,
         media: f.media.filter((m) => m.url?.trim()),
         features: f.featuresText.split('\n').map((x) => x.trim()).filter(Boolean),
       })
@@ -104,6 +119,13 @@ function ListingModal({ app, onClose, onSaved }) {
           </div>
         </div>
         <Input label="Correo de soporte (se muestra en la ficha)" type="email" value={f.support_email} onChange={set('support_email')} placeholder="soporte@tuapp.com" />
+        <div>
+          <Input label="Manual de uso (PDF, botón «Descargar manual» en la ficha y en el portal)" value={f.manual_url} onChange={set('manual_url')} placeholder="https://…/manual.pdf" />
+          <label className="text-xs text-gold cursor-pointer inline-block mt-1">
+            {uploading ? 'Subiendo…' : 'subir PDF'}
+            <input type="file" className="hidden" accept="application/pdf" onChange={uploadManual} disabled={uploading} />
+          </label>
+        </div>
         <label className="block">
           <span className="block text-xs text-ink2 mb-1.5">Descripción</span>
           <textarea className="w-full bg-bg border border-border rounded-xl px-3.5 py-2.5 text-sm text-ink outline-none focus:border-gold/60 min-h-24" value={f.description} onChange={set('description')} />
