@@ -78,7 +78,7 @@ El importe es `units × price_per_unit`, redondeado a 6 decimales. Divisa: **USD
 | **200** | `{ "idempotent": true, "charge": {…} }` | Ese `event_id` ya estaba cobrado. **No es un error**: sigue adelante, no vuelvas a cobrar |
 | **200** | `{ "idempotent": true, "reconciled": true, … }` | Un intento anterior sí había cobrado en GHL; se recuperó. No cobres otra vez |
 | **400** | `{ "error": "…" }` | Falta un campo o es inválido. Corrige la petición (reintentar igual no sirve) |
-| **403** | `{ "error": "…", "code"?: "…" }` | Tu API key no puede cobrar a esa subcuenta. Con `code: "CHARGES_DISABLED"` el administrador ha cortado los cobros de tu app: deja de cobrar y sigue sirviendo o para, según tu producto (el resto de la API sigue funcionando). Ramifica por `code`, no por el texto |
+| **403** | `{ "error": "…", "code"?: "…" }` | Con `code: "LOCATION_NOT_ALLOWED"` tu API key no puede operar con esa subcuenta (alcance limitado por el administrador). Con `code: "CHARGES_DISABLED"` el administrador ha cortado los cobros de tu app: deja de cobrar y sigue sirviendo o para, según tu producto (el resto de la API sigue funcionando). Ramifica por `code`, no por el texto |
 | **404** | `{ "error": "…" }` | Tarifa inexistente/inactiva, o subcuenta no conectada |
 | **409** | `{ "error": "…", "charge_id": 12 }` | Ese `event_id` tiene un cobro **en curso**. Espera unos segundos y **reintenta con el mismo `event_id`** |
 | **429** | `{ "error": "…" }` | Superaste el límite de peticiones/min. Respeta la cabecera `X-RateLimit-Remaining` y reintenta |
@@ -272,7 +272,8 @@ Pídele al administrador que active el modo prueba de tu app mientras integras, 
   en todas las respuestas.
 - **Aislamiento:** con tu API key solo ves tus cargos; `GET /api/v1/charges` filtra por tu app siempre.
 - **Alcance por subcuenta:** el administrador puede limitar tu clave a subcuentas concretas. Fuera de esa lista
-  recibes `403` y `GET /api/v1/locations` solo lista las permitidas.
+  recibes `403` con `code: "LOCATION_NOT_ALLOWED"` (en `POST /charges`, `/has-funds` y `/access`) y
+  `GET /api/v1/locations` solo lista las permitidas. Por defecto la clave alcanza a **todas** las subcuentas.
 - **Reconciliación automática:** un proceso en segundo plano revisa cada 60 s los cargos `unknown` (>3 min) y los
   `pending` huérfanos (>10 min), pregunta a GHL y los cierra correctamente. Por eso un cobro "sin confirmar"
   nunca se pierde ni se duplica: consúltalo más tarde por `event_id`.

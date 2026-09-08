@@ -704,7 +704,8 @@ X-Api-Key: dw_tu_api_key</pre>
               <tr>
                 <td class="nw"><span class="http stop">403</span></td>
                 <td><code>{ error, code? }</code></td>
-                <td>Tu clave no está autorizada para esa subcuenta. Con <code>code: "CHARGES_DISABLED"</code> el
+                <td>Con <code>code: "LOCATION_NOT_ALLOWED"</code> tu clave no puede operar con esa subcuenta
+                  (alcance limitado por el administrador). Con <code>code: "CHARGES_DISABLED"</code> el
                   administrador ha cortado los cobros de tu app: deja de cobrar y sigue sirviendo o para, según tu
                   producto (el resto de la API sigue funcionando). Ramifica por <code>code</code>, no por el texto.</td>
               </tr>
@@ -992,7 +993,9 @@ DELETE /api/v1/charges/12
               <tr>
                 <td class="nw">Alcance</td>
                 <td>El administrador puede limitar tu clave a subcuentas concretas. Fuera de esa lista recibes
-                  <span class="http stop">403</span>, y <code>GET /api/v1/locations</code> solo lista las permitidas.</td>
+                  <span class="http stop">403</span> con <code>code: "LOCATION_NOT_ALLOWED"</code> (en
+                  <code>POST /charges</code>, <code>/has-funds</code> y <code>/access</code>), y
+                  <code>GET /api/v1/locations</code> solo lista las permitidas. Por defecto la clave alcanza a todas.</td>
               </tr>
               <tr>
                 <td class="nw">Reconciliación</td>

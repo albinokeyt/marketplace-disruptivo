@@ -7,9 +7,11 @@ import * as ghl from './ghl.js'
 const MAX_PRICE = 999_999.999999
 const MAX_AMOUNT = 99_999_999.999999
 
-const fail = (statusCode, message) => {
+// `code` es un identificador ESTABLE para que las apps ramifiquen sin depender del texto del mensaje
+const fail = (statusCode, message, code = null) => {
   const err = new Error(message)
   err.statusCode = statusCode
+  if (code) err.code = code
   return err
 }
 
@@ -52,7 +54,7 @@ export async function resolveChargeInput(appRow, body) {
   // scoping app→subcuenta: NULL = todas; array = solo esas
   const allowed = appRow.allowed_location_ids
   if (Array.isArray(allowed) && !allowed.includes(location_id)) {
-    throw fail(403, `Esta API key no está autorizada para cobrar a la subcuenta ${location_id}`)
+    throw fail(403, `Esta API key no está autorizada para cobrar a la subcuenta ${location_id}`, 'LOCATION_NOT_ALLOWED')
   }
 
   const { rows: [conn] } = await q('SELECT * FROM connections WHERE location_id=$1', [location_id])

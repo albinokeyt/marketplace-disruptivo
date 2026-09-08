@@ -43,7 +43,7 @@ export default async function publicApiRoutes(app) {
     try {
       input = await resolveChargeInput(consumer, req.body)
     } catch (err) {
-      return reply.code(err.statusCode || 400).send({ error: err.message })
+      return reply.code(err.statusCode || 400).send({ error: err.message, ...(err.code ? { code: err.code } : {}) })
     }
     // `code` es un identificador ESTABLE para que las apps ramifiquen sin depender del texto del mensaje
     if (input.meter.code === (await topupMeterCode())) {
@@ -156,7 +156,7 @@ export default async function publicApiRoutes(app) {
   // ¿Tiene saldo el wallet de esta subcuenta?
   app.get('/api/v1/locations/:locationId/has-funds', async (req, reply) => {
     if (!locationAllowed(req.consumerApp, req.params.locationId)) {
-      return reply.code(403).send({ error: 'Esta API key no está autorizada para esa subcuenta' })
+      return reply.code(403).send({ code: 'LOCATION_NOT_ALLOWED', error: 'Esta API key no está autorizada para esa subcuenta' })
     }
     const { rows: [conn] } = await q('SELECT * FROM connections WHERE location_id=$1', [req.params.locationId])
     if (!conn) return reply.code(404).send({ error: 'Subcuenta no conectada' })
@@ -247,7 +247,7 @@ export default async function publicApiRoutes(app) {
   app.get('/api/v1/access/:locationId', async (req, reply) => {
     const locationId = req.params.locationId
     if (!locationAllowed(req.consumerApp, locationId)) {
-      return reply.code(403).send({ error: 'Esta API key no está autorizada para esa subcuenta' })
+      return reply.code(403).send({ code: 'LOCATION_NOT_ALLOWED', error: 'Esta API key no está autorizada para esa subcuenta' })
     }
     const access = await checkAccess(req.consumerApp.id, locationId)
     return { ...access, credit: await getBalance(locationId) }
