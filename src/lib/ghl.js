@@ -2,7 +2,7 @@ import { q, numOr } from '../db.js'
 import { redis } from '../redis.js'
 import { getGhlConfig } from './settings.js'
 
-const API = 'https://services.leadconnectorhq.com'
+export const API = 'https://services.leadconnectorhq.com'
 const VERSION = '2021-07-28'
 const AUTH_BASE = 'https://marketplace.gohighlevel.com/oauth/chooselocation'
 
@@ -19,7 +19,7 @@ export function buildAuthUrl(cfg, redirectUri, { scopes = DEFAULT_SCOPES, state 
   return `${AUTH_BASE}?${params}`
 }
 
-async function tokenRequest(form) {
+export async function tokenRequest(form) {
   // timeout menor que el TTL del lock de refresh (20s): la sección crítica queda acotada
   const res = await fetch(`${API}/oauth/token`, {
     method: 'POST',

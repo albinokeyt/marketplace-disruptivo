@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "test": "node --test"
+    "test": "node --test --experimental-test-module-mocks"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",
@@ -18,5 +18,8 @@
     "fastify": "^5.3.2",
     "ioredis": "^5.6.1",
     "pg": "^8.16.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.16"
   }
 }

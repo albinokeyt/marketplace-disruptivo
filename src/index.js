@@ -15,6 +15,7 @@ import adminRoutes from './routes/admin.js'
 import marketplaceRoutes from './routes/marketplace.js'
 import userRoutes from './routes/users.js'
 import assetRoutes, { MAX_UPLOAD_BYTES } from './routes/assets.js'
+import webhookRoutes from './routes/webhooks.js'
 
 const app = Fastify({ logger: true, trustProxy: true, bodyLimit: 1024 * 1024 })
 
@@ -31,6 +32,7 @@ app.get('/healthz', async (req, reply) => {
 })
 
 await app.register(oauthRoutes)
+await app.register(webhookRoutes)
 await app.register(adminRoutes)
 await app.register(marketplaceRoutes)
 await app.register(userRoutes)

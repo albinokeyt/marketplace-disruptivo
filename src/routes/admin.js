@@ -11,6 +11,8 @@ import { normalizeBillingConfig } from '../lib/billingRules.js'
 import { refundCharge, reconcileCharge, publicCharge } from '../lib/charges.js'
 import { UNKNOWN_GRACE_MS } from '../lib/reconciler.js'
 import { decryptGhlSso, ssoAuthorized } from '../lib/sso.js'
+import { ensureConnection, syncInstalledLocations, agencyTokenInfo } from '../lib/installs.js'
+import { SELF_HEAL } from '../lib/installRules.js'
 import * as ghl from '../lib/ghl.js'
 
 const LOGIN_MAX_FAILS = 10
@@ -70,21 +72,36 @@ export default async function adminRoutes(app) {
       return reply.code(401).send({ error: 'No se pudo verificar la identidad de GHL' })
     }
     const admins = (await getSetting('sso_admins')) || {}
+    // La Custom Page solo aparece en subcuentas con la app instalada: si alguien la abre y la subcuenta aún no
+    // figura en Conexiones (instalación sin redirección, pestaña cerrada…), se da de alta aquí mismo.
+    const loc = String(identity.activeLocation || identity.locationId || '').trim()
+    const healConnection = async () => {
+      if (!loc) return null
+      const { rows: [c] } = await q('SELECT location_id, status FROM connections WHERE location_id=$1', [loc])
+      if (c && !SELF_HEAL.includes(c.status)) return c
+      try {
+        const r = await ensureConnection(loc, { companyId: identity.companyId || null, source: 'sso' })
+        return r.conn || c || null
+      } catch (err) {
+        req.log.warn({ err: err.message, locationId: loc }, 'sso: no se pudo completar la conexión')
+        return err.conn || c || null
+      }
+    }
     // sesión cross-site: la cookie viaja en el iframe de GHL (SameSite=None; Secure; Partitioned)
     if (ssoAuthorized(identity, admins, cfg)) {
-      // dueño/admin de la agencia → panel completo
+      // dueño/admin de la agencia → panel completo (y si la abrió desde una subcuenta, se asegura su conexión)
+      healConnection().catch(() => {})
       await createSession(req, reply, { userId: `sso:${String(identity.email || '').toLowerCase()}`, role: 'admin', crossSite: true })
       return { ok: true, role: 'admin' }
     }
     // CLIENTE: cualquier otro usuario que abra la Custom Page desde una subcuenta con la app instalada
     // entra a SU portal (saldo, recargas, consumo, accesos) limitado a esa subcuenta. La identidad y la
     // subcuenta activa vienen cifradas por GHL, así que no se pueden falsificar.
-    const loc = String(identity.activeLocation || identity.locationId || '').trim()
     if (!loc) {
       return reply.code(403).send({ error: 'Abre Marketplace Disruptivo desde el menú de una subcuenta (no desde la vista de agencia)' })
     }
-    const { rows: [conn] } = await q('SELECT location_id FROM connections WHERE location_id=$1', [loc])
-    if (!conn) return reply.code(403).send({ error: 'Esta subcuenta aún no tiene instalada la app Marketplace Disruptivo' })
+    const conn = await healConnection()
+    if (!conn || conn.status === 'uninstalled') return reply.code(403).send({ error: 'Esta subcuenta aún no tiene instalada la app Marketplace Disruptivo' })
     const uid = String(identity.userId || identity.email || '').trim().toLowerCase()
     if (!uid) return reply.code(401).send({ error: 'No se pudo verificar la identidad de GHL' })
     await createSession(req, reply, {
@@ -328,13 +345,45 @@ export default async function adminRoutes(app) {
     const { rows } = await q(
       `SELECT k.id, k.location_id, k.company_id, k.alias, k.name, k.test_mode, k.status,
               k.created_at, k.updated_at, (k.refresh_token IS NOT NULL) AS has_tokens,
+              k.source, k.last_error, k.installed_at, k.uninstalled_at,
               COUNT(c.id)::int AS charges_count,
               COALESCE(SUM(c.amount) FILTER (WHERE c.status='created' AND c.paid_with='wallet'), 0) AS amount_total,
               COALESCE(SUM(c.amount) FILTER (WHERE c.status='created' AND c.paid_with='credit'), 0) AS credit_total
        FROM connections k LEFT JOIN charges c ON c.connection_id = k.id
        GROUP BY k.id ORDER BY k.created_at DESC`
     )
-    return { connections: rows.map((r) => ({ ...r, amount_total: numOr(r.amount_total, 0), credit_total: numOr(r.credit_total, 0) })) }
+    return {
+      connections: rows.map((r) => ({ ...r, amount_total: numOr(r.amount_total, 0), credit_total: numOr(r.credit_total, 0) })),
+      agencies: (await agencyTokenInfo()).map((a) => ({
+        company_id: a.company_id, oauth_write: a.oauth_write, oauth_readonly: a.oauth_readonly,
+        last_sync_at: a.last_sync_at, last_sync_result: a.last_sync_result, updated_at: a.updated_at,
+      })),
+    }
+  })
+
+  // Instalaciones: conecta todas las subcuentas donde está instalada la app (con el token de agencia).
+  // auto=true (al abrir la página) no repite si se sincronizó hace menos de 2 minutos.
+  app.post('/api/admin/connections/sync', guard, async (req) => {
+    if (req.body?.auto) {
+      const due = await redis.set('installs:sync:auto', '1', 'EX', 120, 'NX').catch(() => 'OK')
+      if (!due) return { skipped: true }
+    }
+    return syncInstalledLocations({ log: req.log })
+  })
+
+  // Completar una conexión pendiente (instalada en GHL pero sin token)
+  app.post('/api/admin/connections/:id/complete', guard, async (req, reply) => {
+    const { rows: [conn] } = await q('SELECT * FROM connections WHERE id=$1', [numOr(req.params.id)])
+    if (!conn) return reply.code(404).send({ error: 'Conexión no encontrada' })
+    try {
+      const r = await ensureConnection(conn.location_id, { companyId: conn.company_id, source: 'panel', reconnectDisconnected: true })
+      if (r.action === 'pendiente') {
+        return reply.code(409).send({ error: 'Aún no hay token de agencia: conéctala con «Conectar subcuenta» o instala la app una vez desde el panel de agencia de GHL', needsOauth: true })
+      }
+      return { action: r.action, connection: { id: r.conn?.id, status: r.conn?.status, name: r.conn?.name } }
+    } catch (err) {
+      return reply.code(502).send({ error: err.message, needsOauth: true })
+    }
   })
 
   app.patch('/api/admin/connections/:id', guard, async (req, reply) => {

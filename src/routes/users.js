@@ -91,7 +91,7 @@ export default async function userRoutes(app) {
     if (String(session.userId || '').startsWith('sso:')) {
       const locs = Array.isArray(session.locs) ? session.locs.map(String).filter(Boolean) : []
       if (!locs.length) return { all: false, locs: [] }
-      const { rows } = await q('SELECT location_id FROM connections WHERE location_id = ANY($1)', [locs])
+      const { rows } = await q(`SELECT location_id FROM connections WHERE location_id = ANY($1) AND status <> 'uninstalled'`, [locs])
       return { all: false, locs: rows.map((r) => r.location_id) }
     }
     const { rows: [u] } = await q('SELECT location_ids, active FROM users WHERE id=$1', [numOr(session.userId)])

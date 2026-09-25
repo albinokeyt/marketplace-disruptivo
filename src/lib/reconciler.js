@@ -4,6 +4,16 @@ import { reconcileCharge, ghlRefundState, isAlreadyRefundedError, deleteRejected
 import { creditTopupOnce } from './topup.js'
 import { reverseTopupCredit, restoreTopupCredit } from './credits.js'
 import { sweepSubscriptions } from './billing.js'
+import { syncInstalledLocations } from './installs.js'
+
+// Instalaciones: además del webhook AppInstall, cada 15 min se repasan las subcuentas donde está instalada la app
+// (con el token de agencia) y se conectan las que falten. Red de seguridad para avisos perdidos o reinicios.
+const INSTALL_SYNC_EVERY_S = 15 * 60
+async function maybeSyncInstalls(log) {
+  const due = await redis.set('installs:sync:tick', '1', 'EX', INSTALL_SYNC_EVERY_S, 'NX').catch(() => null)
+  if (!due) return
+  await syncInstalledLocations({ log })
+}
 import * as ghl from './ghl.js'
 
 // Sana el ledger para cargos que quedaron sin confirmar: 'unknown' (timeout/red al cobrar) o
@@ -191,6 +201,7 @@ export function startReconciler(log, intervalMs = 60_000) {
       await sweepDiscarded(log)
       const s = await sweepSubscriptions(log)
       if (s.checked) log?.info?.(s, 'suscripciones: cobro recurrente')
+      await maybeSyncInstalls(log).catch((err) => log?.error?.({ err: err.message }, 'instalaciones: sincronización falló'))
       if (r.checked) log?.info?.(r, 'reconciliador: barrido')
     } catch (err) {
       log?.error?.({ err: err.message }, 'reconciliador: barrido falló')

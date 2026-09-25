@@ -74,6 +74,8 @@ const STATUS = {
   revoked: { label: 'Revocada', cls: 'bg-bad/10 text-bad border-bad/30' },
   connected: { label: 'Conectada', cls: 'bg-ok/10 text-ok border-ok/30' },
   disconnected: { label: 'Desconectada', cls: 'bg-mut/10 text-ink2 border-border' },
+  awaiting: { label: 'Instalada · falta token', cls: 'bg-warn/10 text-warn border-warn/30' },
+  uninstalled: { label: 'Desinstalada', cls: 'bg-mut/10 text-ink2 border-border' },
   error: { label: 'Error', cls: 'bg-bad/10 text-bad border-bad/30' },
   subscription: { label: 'Suscripción', cls: 'bg-gold/10 text-gold border-gold/30' },
   trial: { label: 'Prueba', cls: 'bg-gold/10 text-gold border-gold/30' },
