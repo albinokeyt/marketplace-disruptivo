@@ -247,6 +247,29 @@ test('token de agencia caducado: se refresca con user_type=Company antes de pedi
   assert.equal(mint.auth, 'Bearer AG-2')
 })
 
+test('token de agencia SIN oauth.write: todas las instaladas se listan como pendientes y no se llama a GHL para pedir tokens', async () => {
+  await q(`UPDATE agency_tokens SET scope = 'charges.write oauth.readonly', token_expires_at = now() + interval '1 day' WHERE company_id='COMP'`)
+  installed.set('L10', 'Diez')
+  installed.set('L11', 'Once')
+  const mintsAntes = calls.filter((c) => c.path === '/oauth/locationToken').length
+  const { syncInstalledLocations } = await import('../src/lib/installs.js')
+  const s = await syncInstalledLocations({})
+  assert.equal(calls.filter((c) => c.path === '/oauth/locationToken').length, mintsAntes)
+  for (const loc of ['L10', 'L11']) {
+    const c = await conn(loc)
+    assert.equal(c.status, 'awaiting', loc)
+    assert.match(c.last_error, /oauth\.write/)
+    assert.equal(c.name, installed.get(loc))
+  }
+  assert.ok(s.pending.length >= 2)
+  await q(`UPDATE agency_tokens SET scope = 'charges.write oauth.readonly oauth.write' WHERE company_id='COMP'`)
+  // con el permiso ya concedido, la siguiente sincronización las conecta
+  const s2 = await syncInstalledLocations({})
+  assert.equal((await conn('L10')).status, 'connected')
+  assert.equal((await conn('L11')).status, 'connected')
+  assert.ok(s2.created.length >= 2)
+})
+
 test('sin token de agencia: la instalación queda listada como «falta token» con el motivo', async () => {
   await q('DELETE FROM agency_tokens')
   await hook({ type: 'INSTALL', appId: 'APP1', companyId: 'COMP', locationId: 'L6' })

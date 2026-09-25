@@ -248,9 +248,14 @@ async function markAwaiting(locationId, companyId, source, motivo, nameHint = nu
   return conn
 }
 
+const NO_OAUTH_WRITE = 'La app de GHL no tiene el permiso oauth.write, necesario para pedir el token de cada subcuenta: añádelo en la app del marketplace y vuelve a instalarla desde el panel de agencia (o conéctala con «Conectar subcuenta»).'
+// sin el scope oauth.write GHL rechaza /oauth/locationToken: si el token de agencia dice qué scopes tiene, ni se intenta
+const canMint = (agencyRow) => !agencyRow?.scope || hasScope(agencyRow.scope, 'oauth.write')
+
 // Garantiza que la subcuenta esté conectada. Devuelve { conn, action } con action:
-// 'ya-conectada' | 'creada' | 'reparada' | 'pendiente' (sin token de agencia) | 'desconectada-a-mano' | 'en-curso'
-export async function ensureConnection(locationId, { companyId = null, source = 'sync', reconnectDisconnected = false, nameHint = null } = {}) {
+// 'ya-conectada' | 'creada' | 'reparada' | 'pendiente' (sin token de agencia o sin permiso) | 'desconectada-a-mano' | 'en-curso'
+// mint=false → solo la lista como pendiente (se usa cuando ya se sabe que GHL rechazará el token)
+export async function ensureConnection(locationId, { companyId = null, source = 'sync', reconnectDisconnected = false, nameHint = null, mint = true } = {}) {
   const loc = String(locationId || '').trim()
   if (!loc) throw new Error('Falta locationId')
   const read = async () => (await q('SELECT * FROM connections WHERE location_id=$1', [loc])).rows[0]
@@ -273,9 +278,13 @@ export async function ensureConnection(locationId, { companyId = null, source = 
     return { conn: (await read()) || row || null, action: 'en-curso' }
   }
   try {
-    const { rows: [agency] } = await q('SELECT company_id FROM agency_tokens WHERE company_id=$1', [cid])
+    const { rows: [agency] } = await q('SELECT company_id, scope FROM agency_tokens WHERE company_id=$1', [cid])
     if (!agency) {
       const conn = await markAwaiting(loc, cid, source, 'Instalada en GHL. Falta el token: instala la app una vez desde el panel de agencia de GHL o usa «Conectar subcuenta».', nameHint)
+      return { conn, action: 'pendiente' }
+    }
+    if (!mint || !canMint(agency)) {
+      const conn = await markAwaiting(loc, cid, source, NO_OAUTH_WRITE, nameHint)
       return { conn, action: 'pendiente' }
     }
     try {
@@ -315,22 +324,23 @@ export async function syncInstalledLocations({ companyId = null, log, maxMints =
     )
     const byLoc = new Map(existing.map((r) => [r.location_id, r]))
     let mints = 0
+    let mint = canMint(a)
     for (const l of locs) {
       const r = byLoc.get(l.locationId)
       if (r && r.status === 'connected' && r.refresh_token) continue
       if (r && r.status === 'disconnected') { summary.skipped++; continue }
       if (r && !SELF_HEAL.includes(r.status) && r.status !== 'connected') { summary.skipped++; continue }
-      if (mints++ >= maxMints) break
+      if (mint && mints++ >= maxMints) break
       try {
-        const res = await ensureConnection(l.locationId, { companyId: a.company_id, source: 'sync', nameHint: l.name })
+        const res = await ensureConnection(l.locationId, { companyId: a.company_id, source: 'sync', nameHint: l.name, mint })
         const item = { locationId: l.locationId, name: res.conn?.alias || res.conn?.name || l.name || null }
         if (res.action === 'creada') summary.created.push(item)
         else if (res.action === 'reparada') summary.repaired.push(item)
         else if (res.action === 'pendiente') summary.pending.push(item)
       } catch (err) {
         summary.failed.push({ locationId: l.locationId, name: l.name || null, error: err.message })
-        // si falta un permiso en la app de GHL fallarán todas igual: no seguir llamando
-        if (/scope|not authorized/i.test(err.message) || err.status === 403) break
+        // si falta un permiso en la app de GHL fallarán todas igual: las demás se listan como pendientes sin llamar a GHL
+        if (/scope|not authorized/i.test(err.message) || err.status === 403) mint = false
       }
     }
     await q('UPDATE agency_tokens SET last_sync_at=now(), last_sync_result=$2 WHERE company_id=$1', [a.company_id, JSON.stringify({
