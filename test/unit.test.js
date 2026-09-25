@@ -60,6 +60,13 @@ test('buildAuthUrl incluye scopes y el state cuando se pasa', () => {
   // sin state no aparece el parámetro
   const url2 = new URL(buildAuthUrl(cfg, 'https://x.test/cb'))
   assert.equal(url2.searchParams.get('state'), null)
+  assert.equal(url2.searchParams.get('version_id'), null)
+  // por defecto pide oauth.write (token de cada subcuenta desde el de agencia)
+  assert.ok(url2.searchParams.get('scope').split(' ').includes('oauth.write'))
+  // con version_id configurado se instala esa versión
+  const url3 = new URL(buildAuthUrl({ ...cfg, version_id: 'v2id' }, 'https://x.test/cb'))
+  assert.equal(url3.searchParams.get('version_id'), 'v2id')
+  assert.equal(url3.pathname, '/v2/oauth/chooselocation')
 })
 
 test('hashPassword/verifyPassword: sal por usuario, verifica y rechaza', () => {

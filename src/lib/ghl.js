@@ -4,9 +4,10 @@ import { getGhlConfig } from './settings.js'
 
 export const API = 'https://services.leadconnectorhq.com'
 const VERSION = '2021-07-28'
-const AUTH_BASE = 'https://marketplace.gohighlevel.com/oauth/chooselocation'
+const AUTH_BASE = 'https://marketplace.gohighlevel.com/v2/oauth/chooselocation'
 
-export const DEFAULT_SCOPES = ['charges.readonly', 'charges.write', 'oauth.readonly', 'locations.readonly']
+// oauth.write: con el token de agencia (instalación masiva) pide el token de cada subcuenta instalada
+export const DEFAULT_SCOPES = ['charges.readonly', 'charges.write', 'oauth.readonly', 'oauth.write', 'locations.readonly']
 
 export function buildAuthUrl(cfg, redirectUri, { scopes = DEFAULT_SCOPES, state } = {}) {
   const params = new URLSearchParams({
@@ -16,6 +17,8 @@ export function buildAuthUrl(cfg, redirectUri, { scopes = DEFAULT_SCOPES, state 
     scope: scopes.join(' '),
   })
   if (state) params.set('state', state)
+  // versión de la app que se instala (la que tiene los permisos de arriba); sin ella GHL elige
+  if (cfg.version_id) params.set('version_id', cfg.version_id)
   return `${AUTH_BASE}?${params}`
 }
 

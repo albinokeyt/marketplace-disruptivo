@@ -76,6 +76,12 @@ export default function Settings() {
             <Input label="Client Secret" type="password" placeholder="(sin cambios)" value={data.ghl_app.client_secret} onChange={setGhl('client_secret')} />
             <Input label="App ID (id de la app en el marketplace)" value={data.ghl_app.app_id} onChange={setGhl('app_id')} />
             <Input
+              label="Version ID (opcional)"
+              hint="Versión de la app que instala «Conectar subcuenta». Está en el enlace de instalación del portal (version_id)."
+              value={data.ghl_app.version_id || ''}
+              onChange={setGhl('version_id')}
+            />
+            <Input
               label="Company ID (agencia, opcional)"
               hint="Solo como respaldo: normalmente llega solo con el OAuth de cada subcuenta."
               value={data.ghl_app.company_id}
