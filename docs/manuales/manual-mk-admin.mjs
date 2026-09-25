@@ -58,13 +58,22 @@ export default {
       id: 'conexiones', titulo: 'Paso 2 · Conexiones: instalar el marketplace en las subcuentas', html: `
 <p>Una <b>conexión</b> es una subcuenta de GoHighLevel con Marketplace Disruptivo instalado. Sin conexión no se puede cobrar a su wallet (sí se le pueden dar pruebas y cortesías).</p>
 <ol class="pasos">
-  <li>Ve a <span class="ruta">Conexiones</span> y pulsa <span class="ruta">Conectar subcuenta</span>. Te lleva a GoHighLevel: elige la subcuenta y autoriza la app. Al volver aparece como <b>Conectada</b>.</li>
-  <li>Otra forma: instala la app directamente desde GoHighLevel con el <b>enlace de instalación</b> que tienes en <span class="ruta">Apps → Marketplace Disruptivo → Vitrina → Link de instalación</span>. Es lo que harás para los clientes: abres el enlace, eliges su subcuenta y autorizas.</li>
+  <li><b>Instala la app en la subcuenta</b> desde el panel de agencia de GoHighLevel (App Marketplace → Marketplace Disruptivo → Instalar → elige una o varias subcuentas) o con el <b>enlace de instalación</b> de <span class="ruta">Apps → Marketplace Disruptivo → Vitrina</span>.</li>
+  <li><b>No tienes que hacer nada más:</b> la subcuenta aparece sola en <span class="ruta">Conexiones</span>. Se da de alta al instalar, cuando GoHighLevel avisa de la instalación, cuando alguien abre la app dentro de la subcuenta y en la revisión automática de cada 15 minutos. Pulsa <span class="ruta">Sincronizar</span> si quieres revisarlo al momento.</li>
   <li>Tras instalarla, la subcuenta ve <b>Marketplace Disruptivo</b> en su menú de Aplicaciones del mercado y su portal funciona con SSO.</li>
+  <li>Si una fila sale como <b>Instalada · falta token</b>, pulsa <span class="ruta">Completar</span>. Si pide conectarla, confirma: se abre GoHighLevel, eliges esa subcuenta y autorizas (es lo mismo que <span class="ruta">Conectar subcuenta</span>).</li>
   <li>En cada fila puedes poner un <b>alias</b> (el nombre que verás en todo el panel), activar el <b>modo prueba</b> de esa conexión (sus cobros no tocan el wallet) y abrir <span class="ruta">Ver como cliente</span>.</li>
-  <li><b>Desconectar</b> elimina la conexión; el cliente deja de poder pagar hasta reinstalar.</li>
+  <li><b>Desconectar</b> corta los cobros de esa subcuenta. Una conexión desconectada a mano no se reconecta sola: solo si reinstalas la app o pulsas <span class="ruta">Completar</span>.</li>
 </ol>
-<figure><img data-src="mk-admin-conexiones-pub.png" alt="Conexiones"><figcaption>Conexiones: subcuentas conectadas, alias, modo prueba y Ver como cliente.</figcaption></figure>
+<figure><img data-src="mk-admin-conexiones-pub.png" alt="Conexiones"><figcaption>Conexiones: el aviso de instalaciones automáticas, Sincronizar, y cada subcuenta con su origen, estado, modo prueba y Ver como cliente.</figcaption></figure>
+<table><tr><th>Estado</th><th>Qué significa</th></tr>
+<tr><td>Conectada</td><td>Todo listo: se le puede cobrar al wallet.</td></tr>
+<tr><td>Instalada · falta token</td><td>La app está instalada en GoHighLevel pero aún no hay permiso para cobrarle. Pulsa Completar. Debajo del nombre verás el motivo.</td></tr>
+<tr><td>Error</td><td>El token caducó y no se pudo renovar. Se repara solo en la siguiente revisión; si no, pulsa Completar.</td></tr>
+<tr><td>Desinstalada</td><td>GoHighLevel avisó de que se quitó la app de esa subcuenta. Si la reinstalas, vuelve a Conectada sola.</td></tr>
+<tr><td>Desconectada</td><td>La desconectaste tú. No se reconecta sola.</td></tr>
+</table>
+<div class="nota"><b>Una sola vez: autorizar la agencia.</b> Para que las subcuentas pasen solas a «Conectada», la primera instalación hecha desde el panel de agencia deja guardada la autorización de la agencia, y la app de GoHighLevel debe tener el permiso <code>oauth.write</code>. Mientras falte, el aviso de arriba de Conexiones te lo indica y las instalaciones salen como «Instalada · falta token».</div>
 <h3>Ver como cliente</h3>
 <p>Abre el portal exactamente como lo ve esa subcuenta, en solo lectura: puedes comprobar qué accesos, saldo y planes ve, pero los botones de recargar y contratar están desactivados para que no cobres nada por error. Arriba puedes cambiar de subcuenta y volver al panel.</p>
 <figure><img data-src="mk-admin-como-cliente-pub.png" alt="Ver como cliente"><figcaption>Ver como cliente: el portal de una subcuenta en solo lectura.</figcaption></figure>
@@ -213,7 +222,8 @@ export default {
     {
       id: 'problemas', titulo: 'Problemas frecuentes', html: `
 <table><tr><th>Qué pasa</th><th>Qué hacer</th></tr>
-<tr><td>Un cliente no ve Marketplace Disruptivo en su menú</td><td>La app no está instalada en esa subcuenta. Instálala con el link de instalación de la vitrina (Apps → Marketplace Disruptivo).</td></tr>
+<tr><td>Un cliente no ve Marketplace Disruptivo en su menú</td><td>La app no está instalada en esa subcuenta. Instálala desde el panel de agencia de GoHighLevel o con el link de instalación de la vitrina (Apps → Marketplace Disruptivo).</td></tr>
+<tr><td>Instalé la app y la subcuenta no sale en Conexiones</td><td>Pulsa Sincronizar. Si aparece como «Instalada · falta token», pulsa Completar. Si no aparece, abre la app una vez dentro de esa subcuenta: se da de alta sola.</td></tr>
 <tr><td>El cliente ve el panel de administración en vez de su portal</td><td>Su correo o su agencia está en Configuración → SSO como administrador. Quítalo de la lista.</td></tr>
 <tr><td>Una app dice que el cliente no tiene acceso</td><td>Mira Suscripciones: ¿existe una activa/prueba/cortesía para esa subcuenta y esa app (o un plan que la incluya) y no está caducada? La app tarda hasta 5 minutos en verlo.</td></tr>
 <tr><td>Una renovación no se cobra</td><td>La subcuenta no está conectada, o no tiene saldo ni fondos en el wallet. Con gracia el cliente sigue entrando unos días: avísale para que recargue. Tras los reintentos queda impagada.</td></tr>

@@ -1,13 +1,18 @@
-// Genera un manual en HTML (autocontenido, imágenes en base64) y su PDF con el Chrome del sistema en modo headless.
-// Uso: node build-manual.mjs <contenido.json>
+// Genera un manual en HTML (autocontenido, imágenes en base64) y su PDF con el Firefox de la familia (firefox-claude, BiDi).
+// Uso: node build-manual.mjs <contenido.mjs|json> [carpeta-de-imagenes]   (por defecto: MANUAL_IMG_DIR o la carpeta del script)
+// Salida: manual-<slug>.html y .pdf en MANUAL_OUT_DIR (por defecto, la carpeta del script).
 //   contenido.json = { slug, titulo, subtitulo, app, color, version, secciones: [{ id, titulo, html }] }
 //   Dentro del html se usa <img data-src="fichero.png"> (ruta relativa al scratchpad) y se sustituye por base64.
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const S = 'C:/Users/keytb/AppData/Local/Temp/claude/C--Users-keytb-OneDrive-Escritorio-PROYECTOS-IA-CLAUDE/20e2b22a-3691-42ed-b676-e622d42f4297/scratchpad'
-const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe'
+const HERE = path.dirname(fileURLToPath(import.meta.url))
+const S = path.resolve(process.argv[3] || process.env.MANUAL_IMG_DIR || HERE)
+const OUT = path.resolve(process.env.MANUAL_OUT_DIR || HERE)
+// el navegador de la casa: Firefox propio por perfiles (nunca Chrome)
+const DD_BROWSER = path.join(process.env.USERPROFILE || process.env.HOME || '', '.claude', 'skills', 'firefox-claude', 'scripts', 'dd-browser.js')
 const defFile = path.resolve(process.argv[2])
 const def = defFile.endsWith('.mjs') ? (await import('file:///' + defFile.split('\\').join('/'))).default : JSON.parse(readFileSync(defFile, 'utf8'))
 
@@ -78,8 +83,8 @@ ${body}
 <div class="footer">${esc(def.titulo)} · ${esc(def.version)} · Si algo no cuadra con lo que ves en pantalla, escribe a departamentodisruptivo@gmail.com.</div>
 </body></html>`
 
-const htmlPath = path.join(S, `manual-${def.slug}.html`)
-const pdfPath = path.join(S, `manual-${def.slug}.pdf`)
+const htmlPath = path.join(OUT, `manual-${def.slug}.html`)
+const pdfPath = path.join(OUT, `manual-${def.slug}.pdf`)
 writeFileSync(htmlPath, html)
-execFileSync(CHROME, ['--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check', `--user-data-dir=${S}/chrome-pdf-profile`, '--no-pdf-header-footer', `--print-to-pdf=${pdfPath}`, 'file:///' + htmlPath.replace(/\\/g, '/')], { stdio: 'ignore', timeout: 120000 })
+execFileSync(process.execPath, [DD_BROWSER, 'pdf', 'file:///' + htmlPath.split(path.sep).join('/'), pdfPath, '--sin-sesion', '--espera', '1500'], { stdio: 'inherit', timeout: 300000 })
 console.log('OK', pdfPath, Math.round(readFileSync(pdfPath).length / 1024) + ' KB')
