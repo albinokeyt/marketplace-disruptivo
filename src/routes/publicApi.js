@@ -49,9 +49,14 @@ const topupMeterCode = async () => (await getTopupConfig()).meter_code
 export default async function publicApiRoutes(app) {
   app.addHook('preHandler', authApp)
 
-  // Crear un cobro contra el wallet de GHL de una subcuenta conectada
+  // Crear un cobro contra el wallet de GHL de una subcuenta conectada.
+  // Con `pay_with: "credit"` el cargo se paga SOLO con el saldo del marketplace (lo que el cliente recargó en su
+  // portal): si no alcanza, NO se toca el wallet de GHL y se responde 402 { code: 'INSUFFICIENT_CREDIT', credit }.
+  // Así una app como Hermes descuenta el consumo del saldo del cliente y nunca de un wallet que podría ser el de la
+  // agencia. El cargo queda 'failed' y se puede reenviar con el MISMO event_id cuando haya saldo.
   app.post('/api/v1/charges', async (req, reply) => {
     const consumer = req.consumerApp
+    const soloCredito = String(req.body?.pay_with || '').trim().toLowerCase() === 'credit'
     let input
     try {
       input = await resolveChargeInput(consumer, req.body)
@@ -142,15 +147,33 @@ export default async function publicApiRoutes(app) {
     // 1º el crédito interno (si cubre el importe completo); si no alcanza, al wallet de GHL.
     // SOLO para cargos NUEVOS: un reintento (fila reclamada de failed/unknown) debe pasar por GHL,
     // que dedupe por eventId y detecta si el intento anterior ya cobró — esa red de seguridad no se toca.
-    if (inserted) {
+    // Excepción: «solo crédito». Ahí el wallet no se usa nunca, así que un reintento también va al crédito (si la fila
+    // venía de un intento por wallet, ya se ha reconciliado arriba contra GHL: solo se llega aquí si NO se cobró).
+    if (inserted || soloCredito) {
       const credit = await trySpendCredit(row.id, input.conn.location_id, input.amount)
       if (credit.ok) {
         return reply.code(201).send({ test_mode: false, charge: publicCharge(credit.row, input.meter) })
       }
       if (credit.reason === 'not_pending') {
-        // otro proceso ya resolvió este cargo: devolver su estado, JAMÁS volver a cobrarlo
+        // otro proceso ya resolvió este cargo: devolver su estado, JAMÁS volver a cobrarlo. Si no acabó cobrado (otro
+        // intento lo dejó 'failed' a la vez), no es un éxito: 409 para que la app reintente con el mismo event_id.
         const { rows: [cur] } = await q('SELECT * FROM charges WHERE id=$1', [row.id])
+        if (!['created', 'test', 'refunded'].includes(cur?.status)) {
+          return reply.code(409).send({ error: 'El cargo cambió de estado mientras se cobraba; reintenta', charge_id: row.id })
+        }
         return reply.send({ idempotent: true, charge: publicCharge(cur, input.meter) })
+      }
+      if (soloCredito) {
+        // 'no_funds' con solo crédito: NO se va al wallet. Queda 'failed' (reintentable con el mismo event_id).
+        const { rows: [fallido] } = await q(
+          `UPDATE charges SET status='failed', error=$2, updated_at=now() WHERE id=$1 AND status='pending' RETURNING *`,
+          [row.id, 'Saldo insuficiente en el marketplace (solo crédito)'])
+        return reply.code(402).send({
+          code: 'INSUFFICIENT_CREDIT',
+          error: 'Saldo insuficiente en Marketplace Disruptivo: el cliente tiene que recargar',
+          credit: await getBalance(input.conn.location_id),
+          charge: publicCharge(fallido || row, input.meter),
+        })
       }
       // 'no_funds' → sigue al wallet
     }
@@ -186,6 +209,8 @@ export default async function publicApiRoutes(app) {
     // el crédito interno se consume ANTES que el wallet: si hay saldo, hay fondos
     const credit = await getBalance(req.params.locationId)
     if (credit > 0) return { hasFunds: true, credit, wallet_has_funds: null }
+    // ?pay_with=credit → la app solo cobra del saldo del marketplace: el wallet no cuenta
+    if (String(req.query?.pay_with || '').toLowerCase() === 'credit') return { hasFunds: false, credit, wallet_has_funds: null }
     try {
       const data = await ghl.hasFunds(conn.id)
       return { hasFunds: Boolean(data?.hasFunds), credit, wallet_has_funds: Boolean(data?.hasFunds) }

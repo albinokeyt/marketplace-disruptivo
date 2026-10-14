@@ -25,7 +25,8 @@ await app.register(fastifyMultipart, { limits: { files: 1, fileSize: MAX_UPLOAD_
 
 // salud para EasyPanel / Docker (público, sin auth)
 app.get('/healthz', async (req, reply) => {
-  const health = { ok: true, db: false, redis: false }
+  // `funciones`: lo que entiende esta versión de la API (las apps lo miran para saber si pueden usarlo)
+  const health = { ok: true, db: false, redis: false, funciones: ['pay_with_credit'] }
   try { await q('SELECT 1'); health.db = true } catch { health.ok = false }
   try { await redis.ping(); health.redis = true } catch { health.ok = false }
   return reply.code(health.ok ? 200 : 503).send(health)
