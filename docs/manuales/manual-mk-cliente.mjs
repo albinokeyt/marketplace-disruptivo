@@ -3,7 +3,7 @@ export default {
   app: 'Marketplace Disruptivo',
   titulo: 'Guía de Marketplace Disruptivo para tu subcuenta',
   subtitulo: 'Tu portal de apps dentro de GoHighLevel: ver tu saldo, recargar, contratar planes, consultar tus accesos y tu consumo, y descargar el manual de cada app. En diez minutos.',
-  version: 'Versión 1.0 · septiembre 2026',
+  version: 'Versión 1.1 · octubre 2026',
   color: '#b8902a',
   secciones: [
     {
@@ -11,15 +11,15 @@ export default {
 <p><b>Marketplace Disruptivo</b> es el portal desde el que tu agencia te da acceso a sus apps para GoHighLevel (Hermes Setter, Emails Disruptivo, VSL Boost…) y desde el que pagas su uso. Todo se paga con un único <b>saldo</b> por subcuenta: lo recargas cuando quieras y cada app descuenta de ahí.</p>
 <ol class="pasos">
   <li>Entra en tu subcuenta de GoHighLevel.</li>
-  <li>En el menú lateral, abre <span class="ruta">Aplicaciones del mercado</span> y pulsa <span class="ruta">Marketplace Disruptivo</span>. Entras identificado automáticamente, sin contraseña.</li>
-  <li>Verás cuatro bloques: <b>Mi consumo</b>, <b>Recargar saldo</b>, <b>Planes disponibles</b> y <b>Mis accesos</b>, además de los avisos de tu agencia y el enlace a la tienda.</li>
+  <li>En el menú lateral pulsa <span class="ruta">Marketplace Disruptivo</span> (si no lo ves, entra por <span class="ruta">Aplicaciones del mercado</span>). Entras identificado automáticamente, sin contraseña.</li>
+  <li>Verás <b>Mi consumo</b>, <b>Recargar saldo</b>, los <b>Planes disponibles</b> (si los hay) y <b>Mis accesos</b>, además de los avisos de tu agencia y el enlace a la tienda.</li>
 </ol>
 <figure><img data-src="mk-portal-1-pub.png" alt="Portal"><figcaption>Tu portal: consumo del mes, saldo y recarga.</figcaption></figure>
-<div class="nota"><b>Si no ves Marketplace Disruptivo en el menú,</b> pídele a tu agencia que lo active en tu subcuenta. Sin él no puedes recargar ni contratar (las pruebas gratuitas sí funcionan).</div>`
+<div class="nota"><b>Si no ves Marketplace Disruptivo en el menú,</b> pídele a tu agencia que lo active en tu subcuenta. Sin él no puedes recargar ni contratar.</div>`
     },
     {
       id: 'saldo', titulo: 'Tu saldo y cómo recargar', html: `
-<p>Tu saldo es un <b>crédito interno</b> que se consume antes que tu wallet de GoHighLevel. Las apps de pago por uso descuentan de él cada consumo; las suscripciones cobran de él cada renovación. Si el crédito no llega, se cobra el resto a tu wallet de GoHighLevel.</p>
+<p>Tu saldo es un <b>crédito</b> por subcuenta. Las apps de <b>pago por consumo</b>, como <b>Hermes</b>, descuentan de él lo que consumen y <b>solo de él</b>: si se acaba, la app se pausa hasta que recargas. Las suscripciones cobran su renovación primero de este crédito y, si no llega, de tu wallet de GoHighLevel.</p>
 <ol class="pasos">
   <li>En <b>Recargar saldo</b>, elige uno de los importes sugeridos o escribe otro (dentro del mínimo y el máximo que verás indicados).</li>
   <li>Pulsa <span class="ruta">Recargar</span>. El importe se cobra a tu <b>wallet de GoHighLevel</b> y aparece al momento como crédito en tu portal.</li>
@@ -50,7 +50,7 @@ export default {
 <tr><td>Cortesía</td><td>Acceso regalado por tu agencia.</td></tr>
 </table>
 <ol class="pasos">
-  <li>Cada tarjeta tiene el enlace <b>Manual de uso (PDF)</b> de la app: descárgalo y sigue sus pasos.</li>
+  <li>Cada tarjeta tiene el enlace <b>Manual de uso (PDF)</b> de la app: descárgalo y sigue sus pasos. Las apps de pago por consumo, como Hermes, no salen aquí: su gasto lo ves en <b>Mi consumo</b>.</li>
   <li>Si un acceso caduca, la app te lo dirá al entrar; contrata el plan o pide a tu agencia una prórroga.</li>
 </ol>
 <figure><img data-src="mk-portal-3-pub.png" alt="Mis accesos"><figcaption>Mis accesos: estado, vencimiento y manual de cada app.</figcaption></figure>`
@@ -65,6 +65,7 @@ export default {
 <table><tr><th>Qué pasa</th><th>Qué hacer</th></tr>
 <tr><td>No veo Marketplace Disruptivo en el menú</td><td>Pide a tu agencia que lo active en tu subcuenta.</td></tr>
 <tr><td>La recarga se rechaza</td><td>Tu wallet de GoHighLevel no tiene fondos: añádelos desde Configuración → Facturación y repite.</td></tr>
+<tr><td>Mi asistente IA (Hermes) no responde</td><td>Mira tu <b>Crédito disponible</b>: si está a 0 o casi, recarga. Vuelve a responder solo en unos 15 minutos.</td></tr>
 <tr><td>Una app dice que no tengo acceso</td><td>Mira Mis accesos: si caducó, contrata el plan o recarga; si debería estar activo, escribe a tu agencia. Las apps tardan hasta 5 minutos en verlo.</td></tr>
 <tr><td>«Tu suscripción está en periodo de gracia»</td><td>La renovación no se pudo cobrar. Recarga saldo: la renovación se reintenta sola cada día.</td></tr>
 <tr><td>Un cobro que no reconozco</td><td>En Mi consumo → consumo reciente ves app, fecha e importe. Si no cuadra, escribe a tu agencia con esos datos.</td></tr>

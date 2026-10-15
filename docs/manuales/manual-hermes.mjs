@@ -3,7 +3,7 @@ export default {
   app: 'Hermes Setter',
   titulo: 'Manual de uso de Hermes Setter',
   subtitulo: 'De cero a tu primer setter de IA respondiendo a tus leads por Instagram, WhatsApp, Facebook y SMS desde GoHighLevel: conexión, prompt, comportamiento, activaciones, seguimientos, pruebas y día a día. Paso a paso, sin conocimientos técnicos.',
-  version: 'Versión 1.0 · septiembre 2026',
+  version: 'Versión 1.1 · octubre 2026',
   color: '#b8902a',
   secciones: [
     {
@@ -219,13 +219,13 @@ export default {
     },
     {
       id: 'saldo', titulo: 'Tu saldo: cómo se cobra Hermes', html: `
-<p>Hermes se cobra <b>por uso</b>: <b>0,25 USD por conversación atendida y día</b>, se descuenta del saldo que tienes en <b>Marketplace Disruptivo</b>, el portal de apps de tu agencia que ves en el menú de tu subcuenta. Sin licencias mensuales: si un día no hay conversaciones, no pagas.</p>
+<p>Hermes se cobra <b>por consumo</b>: la inteligencia artificial que usa con tus leads (respuestas, seguimientos, audios e imágenes) se descuenta de tu <b>Crédito disponible</b> en <b>Marketplace Disruptivo</b>, el portal de apps de tu agencia que ves en el menú de tu subcuenta. Sin cuotas fijas: pagas solo lo que consume.</p>
 <ol class="pasos">
-  <li>Abre <span class="ruta">Aplicaciones del mercado → Marketplace Disruptivo</span> en tu subcuenta.</li>
-  <li>En <b>Recargar saldo</b> elige un importe: se cobra de tu wallet de GoHighLevel y queda como crédito para todas las apps del marketplace. Ahí mismo ves tu consumo por app y tus accesos.</li>
-  <li>Si tu agencia te ha dado una <b>prueba gratuita</b>, no se descuenta nada hasta que termine; lo ves en <b>Mis accesos</b>.</li>
+  <li>En el menú lateral pulsa <span class="ruta">Marketplace Disruptivo</span> (si no lo ves, entra por <span class="ruta">Aplicaciones del mercado → Marketplace Disruptivo</span>).</li>
+  <li>En <b>Recargar saldo</b> elige un importe: se cobra de tu wallet de GoHighLevel y queda como crédito. Ahí mismo ves tu consumo por app.</li>
+  <li>El consumo no se descuenta mensaje a mensaje: se agrupa y se cobra cuando suma 1 $ (o a las 24 horas si gastas menos). Probar no se cobra (Simulador, Probar agente y Arquitecto de prompt), aunque el Simulador necesita algo de saldo para funcionar.</li>
 </ol>
-<div class="ojo"><b>Sin saldo, el setter no atiende.</b> Si el saldo se agota, Hermes deja de responder a los leads nuevos hasta que recargues (lo reintenta solo durante unas horas). Mantén siempre un colchón.</div>`
+<div class="ojo"><b>Hermes cobra solo del Crédito disponible, nunca directamente de tu wallet.</b> Si el crédito se acaba, deja de responder hasta que recargues: al recargar vuelve solo en unos 15 minutos y contesta lo que haya llegado en las últimas 6 horas. Recarga antes de bajar de 3 $.</div>`
     },
     {
       id: 'problemas', titulo: 'Problemas frecuentes', html: `
