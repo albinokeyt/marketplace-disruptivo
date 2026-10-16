@@ -212,7 +212,9 @@ export default function UserPortal({ me, onLogout, asLocation = null, onPickLoca
           <Card className="mb-6 border-gold/30">
             <div className="flex flex-col lg:flex-row lg:items-center gap-4">
               <div className="flex-1">
-                <h2 className="text-sm font-semibold flex items-center gap-2"><Wallet size={15} className="text-gold" /> Recargar saldo</h2>
+                <h2 className="text-sm font-semibold flex items-center gap-2"><Wallet size={15} className="text-gold" /> Recargar saldo
+                  <a href="/docs/manuales/manual-recargar-saldo.pdf" target="_blank" rel="noopener noreferrer" className="ml-1 text-[11px] font-normal text-gold/90 hover:text-gold inline-flex items-center gap-1"><ExternalLink size={11} /> ¿Cómo recargar? (PDF)</a>
+                </h2>
                 <p className="text-[11px] text-ink2 mt-1">
                   {cardOn
                     ? <>Elige el importe y págalo con tarjeta (pago seguro y cifrado). Se suma a tu saldo en cuanto se confirma el pago y con él se pagan tus apps.{walletOn && ' También puedes pasarlo desde tu monedero de GoHighLevel.'}</>
