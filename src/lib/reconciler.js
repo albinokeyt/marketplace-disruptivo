@@ -1,3 +1,4 @@
+import { sweepCardTopups } from './cardTopup.js'
 import { q } from '../db.js'
 import { redis } from '../redis.js'
 import { reconcileCharge, ghlRefundState, isAlreadyRefundedError, deleteRejected } from './charges.js'
@@ -202,6 +203,8 @@ export function startReconciler(log, intervalMs = 60_000) {
       const s = await sweepSubscriptions(log)
       if (s.checked) log?.info?.(s, 'suscripciones: cobro recurrente')
       await maybeSyncInstalls(log).catch((err) => log?.error?.({ err: err.message }, 'instalaciones: sincronización falló'))
+      // recargas con tarjeta pagadas en Stripe con la pestaña cerrada: se abonan aquí
+      await sweepCardTopups(log).catch((err) => log?.error?.({ err: err.message }, 'recargas con tarjeta: barrido falló'))
       if (r.checked) log?.info?.(r, 'reconciliador: barrido')
     } catch (err) {
       log?.error?.({ err: err.message }, 'reconciliador: barrido falló')

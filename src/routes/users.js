@@ -6,6 +6,7 @@ import { rateLimit } from '../lib/ratelimit.js'
 import { publicCharge } from '../lib/charges.js'
 import { createTopup, getTopupConfig } from '../lib/topup.js'
 import { purchasePlan } from '../lib/billing.js'
+import { getCardTopupConfig, createCardTopup, confirmCardTopup } from '../lib/cardTopup.js'
 
 const publicUser = (u) => ({
   id: u.id, email: u.email, name: u.name, role: u.role,
@@ -140,6 +141,10 @@ export default async function userRoutes(app) {
          WHERE c.kind='usage' AND c.status IN ('created','test') ${locFilter}
          ORDER BY c.created_at DESC LIMIT 30`, params),
     ])
+    const cardLoc = scope.all ? '' : 'AND location_id = ANY($1)'
+    const { rows: [card] } = await q(
+      `SELECT COALESCE(SUM(amount) FILTER (WHERE paid_at >= now() - interval '30 days'),0) AS last30, COALESCE(SUM(amount),0) AS all_time
+       FROM card_topups WHERE status='paid' ${cardLoc}`, params)
     // saldo de crédito disponible (suma de sus subcuentas)
     const credit = scope.all
       ? await q('SELECT COALESCE(SUM(balance),0) AS c FROM credits')
@@ -148,7 +153,10 @@ export default async function userRoutes(app) {
       totals: { last30: numOr(totals.rows[0].last30, 0), all_time: numOr(totals.rows[0].all_time, 0) },
       credit: numOr(credit.rows[0].c, 0),
       credit_used: { last30: numOr(totals.rows[0].credit_last30, 0), all_time: numOr(totals.rows[0].credit_all_time, 0) },
-      topups: { last30: numOr(totals.rows[0].topup_last30, 0), all_time: numOr(totals.rows[0].topup_all_time, 0) },
+      topups: {
+        last30: (numOr(totals.rows[0].topup_last30, 0) ?? 0) + (numOr(card.last30, 0) ?? 0),
+        all_time: (numOr(totals.rows[0].topup_all_time, 0) ?? 0) + (numOr(card.all_time, 0) ?? 0),
+      },
       by_app: byApp.rows.map((r) => ({ ...r, amount: numOr(r.amount, 0) })),
       recent: recent.rows.map((r) => ({ ...r, amount: numOr(r.amount, 0), units: numOr(r.units) })),
     }
@@ -223,8 +231,65 @@ export default async function userRoutes(app) {
   app.get('/api/me/topup-config', { preHandler: requireAuth }, async () => {
     const cfg = await getTopupConfig()
     const { rows: [m] } = await q('SELECT 1 FROM meters WHERE code=$1 AND active=true', [cfg.meter_code])
-    return { enabled: Boolean(cfg.enabled && m), presets: cfg.presets, min: cfg.min, max: cfg.max, currency: 'USD' }
+    return { enabled: Boolean(cfg.enabled && m), presets: cfg.presets, min: cfg.min, max: cfg.max, currency: 'USD', card: await getCardTopupConfig() }
   })
+
+  // Recarga con TARJETA (Stripe Checkout): devuelve la URL de pago; el crédito se abona cuando Stripe confirma
+  app.post('/api/me/topup/card', { preHandler: requireAuth }, async (req, reply) => {
+    const locationId = String(req.body?.location_id || '').trim()
+    if (!locationId) return reply.code(400).send({ error: 'Falta location_id' })
+    const scope = await scopeFor(req.session, previewOf(req))
+    if (scope.preview) return reply.code(403).send({ error: '«Ver como cliente» es solo lectura' })
+    if (!scope.all && !scope.locs.includes(locationId)) return reply.code(403).send({ error: 'No tienes acceso a esa subcuenta' })
+    const rl = await rateLimit(`cardtopup:${req.session.userId}`, 10, 600)
+    if (!rl.ok) return reply.code(429).send({ error: 'Demasiados intentos de pago seguidos; espera unos minutos' })
+    try {
+      const r = await createCardTopup({ locationId, amount: req.body?.amount, userId: String(req.session.userId), email: req.session.email || null })
+      return reply.code(201).send(r)
+    } catch (err) {
+      return reply.code(err.statusCode || 502).send({ error: err.message })
+    }
+  })
+
+  // Estado de una recarga con tarjeta (el portal pregunta mientras el cliente paga); si Stripe ya cobró, la abona
+  app.get('/api/me/topup/card/:id', { preHandler: requireAuth }, async (req, reply) => {
+    const { rows: [row] } = await q('SELECT location_id FROM card_topups WHERE id=$1', [numOr(req.params.id)])
+    if (!row) return reply.code(404).send({ error: 'Recarga no encontrada' })
+    const scope = await scopeFor(req.session, previewOf(req))
+    if (!scope.all && !scope.locs.includes(row.location_id)) return reply.code(403).send({ error: 'No tienes acceso a esa recarga' })
+    try {
+      const r = await confirmCardTopup(req.params.id)
+      const { rows: [c] } = await q('SELECT balance FROM credits WHERE location_id=$1', [row.location_id])
+      return { ...r, balance: numOr(c?.balance, 0) }
+    } catch (err) {
+      return reply.code(err.statusCode || 502).send({ error: err.message })
+    }
+  })
+
+  // Vuelta desde Stripe (pestaña aparte, sin sesión): confirma el pago y explica qué hacer
+  const paginaRecarga = (titulo, texto, ok) => `<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Marketplace Disruptivo</title>
+<style>body{font-family:system-ui,sans-serif;background:#0f1117;color:#e8e6e0;display:grid;place-items:center;min-height:100vh;margin:0;padding:16px}
+.card{background:#181b23;border:1px solid #2a2e3a;border-radius:14px;padding:36px;max-width:460px;text-align:center;line-height:1.55}
+.icon{font-size:40px;margin-bottom:10px}h1{font-size:20px;margin:0 0 10px;color:${ok ? '#d9b45b' : '#e8e6e0'}}p{margin:0;color:#c9c6bd}</style></head>
+<body><div class="card"><div class="icon">${ok ? '✅' : 'ℹ️'}</div><h1>${titulo}</h1><p>${texto}</p></div></body></html>`
+  app.get('/recarga-tarjeta/ok', async (req, reply) => {
+    const rl = await rateLimit(`cardtopup-ok:${req.ip}`, 30, 60)
+    if (!rl.ok) return reply.code(429).type('text/html').send(paginaRecarga('Un momento', 'Demasiadas comprobaciones seguidas. Vuelve a cargar la página en un minuto.', false))
+    try {
+      const r = await confirmCardTopup(req.query?.id, { sessionId: String(req.query?.session_id || '') || null })
+      if (r.status === 'paid') {
+        return reply.type('text/html').send(paginaRecarga('¡Recarga completada!', `Se han sumado <b>${Number(r.amount).toFixed(2)} USD</b> a tu saldo de Marketplace Disruptivo. Ya puedes cerrar esta pestaña y volver a GoHighLevel.`, true))
+      }
+      return reply.type('text/html').send(paginaRecarga('Pago en verificación', 'Stripe aún no ha confirmado el pago. En cuanto lo confirme, el saldo se sumará solo (normalmente en menos de un minuto). Puedes cerrar esta pestaña.', false))
+    } catch (err) {
+      req.log.warn({ err: err.message, id: req.query?.id }, 'vuelta de la recarga con tarjeta')
+      return reply.code(err.statusCode && err.statusCode < 500 ? err.statusCode : 502).type('text/html')
+        .send(paginaRecarga('No se pudo comprobar el pago', 'Si has pagado, el saldo se sumará solo en unos minutos. Si no aparece, escribe a departamentodisruptivo@gmail.com.', false))
+    }
+  })
+  app.get('/recarga-tarjeta/cancelada', async (req, reply) =>
+    reply.type('text/html').send(paginaRecarga('Pago cancelado', 'No se ha cobrado nada. Puedes cerrar esta pestaña y volver a intentarlo desde Marketplace Disruptivo.', false)))
 
   app.post('/api/me/topup', { preHandler: requireAuth }, async (req, reply) => {
     const locationId = String(req.body?.location_id || '').trim()

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Store as StoreIcon, LogOut, ExternalLink, BadgeCheck, Bell, Wallet, Eye, ArrowLeft } from 'lucide-react'
+import { Store as StoreIcon, LogOut, ExternalLink, BadgeCheck, Bell, Wallet, Eye, ArrowLeft, CreditCard } from 'lucide-react'
 import { api, fmtUsd, fmtDate } from '../api.js'
 import { Card, Th, Td, Empty, Badge, Button } from '../components/ui.jsx'
 import { useCountUp } from '../hooks.js'
@@ -19,6 +19,7 @@ export default function UserPortal({ me, onLogout, asLocation = null, onPickLoca
   const [topupLoc, setTopupLoc] = useState('')
   const [topupAmt, setTopupAmt] = useState('')
   const [topupBusy, setTopupBusy] = useState(false)
+  const [cardWait, setCardWait] = useState(null) // { id, amount, url } mientras el cliente paga en Stripe
   const [allConnections, setAllConnections] = useState([])
   const [plans, setPlans] = useState([])
   const [buyLoc, setBuyLoc] = useState('')
@@ -70,6 +71,55 @@ export default function UserPortal({ me, onLogout, asLocation = null, onPickLoca
   // Recarga: cobro REAL al wallet de GHL de la subcuenta → crédito interno al instante
   const topupNum = Number(topupAmt)
   const topupValid = Boolean(topupCfg) && Number.isFinite(topupNum) && topupNum >= (topupCfg?.min ?? 1) && topupNum <= (topupCfg?.max ?? Infinity)
+  const cardOn = Boolean(topupCfg?.card?.enabled)
+  const walletOn = Boolean(topupCfg?.enabled)
+
+  // Recarga con TARJETA: abre el pago seguro de Stripe en otra pestaña y espera a que Stripe lo confirme
+  const doCardTopup = async () => {
+    if (!topupValid) return alert(`El importe debe estar entre ${topupCfg.min} y ${topupCfg.max} USD`)
+    const amt = Math.round(topupNum * 100) / 100
+    // la pestaña se abre en el mismo clic (si se abre después, el navegador la bloquea)
+    let w = null
+    try { w = window.open('', '_blank') } catch { w = null }
+    setTopupBusy(true)
+    try {
+      const r = await api.post('/api/me/topup/card', { location_id: topupLoc, amount: amt })
+      if (w) w.location.href = r.url
+      setCardWait({ id: r.id, amount: r.amount, url: r.url })
+      setTopupAmt('')
+    } catch (err) {
+      if (w) w.close()
+      alert(err.message)
+    } finally {
+      setTopupBusy(false)
+    }
+  }
+  useEffect(() => {
+    if (!cardWait) return
+    let alive = true
+    let timer = null
+    const t0 = Date.now()
+    const tick = async () => {
+      if (!alive) return
+      try {
+        const st = await api.get(`/api/me/topup/card/${cardWait.id}`)
+        if (st.status === 'paid') {
+          alive = false; setCardWait(null); loadUsage()
+          alert(`¡Recarga completada! Se han sumado ${fmtUsd(st.amount)}. Saldo disponible: ${fmtUsd(st.balance)}`)
+          return
+        }
+        if (st.status === 'expired' || st.status === 'failed') {
+          alive = false; setCardWait(null)
+          alert('El pago no se completó. No se ha cobrado nada: puedes volver a intentarlo.')
+          return
+        }
+      } catch { /* sigue esperando */ }
+      if (Date.now() - t0 > 30 * 60 * 1000) { alive = false; setCardWait(null); return }
+      timer = setTimeout(tick, 4000)
+    }
+    timer = setTimeout(tick, 4000)
+    return () => { alive = false; clearTimeout(timer) }
+  }, [cardWait])
   const doTopup = async () => {
     if (!topupValid) return alert(`El importe debe estar entre ${topupCfg.min} y ${topupCfg.max} USD`)
     const amt = Math.round(topupNum * 100) / 100
@@ -158,13 +208,15 @@ export default function UserPortal({ me, onLogout, asLocation = null, onPickLoca
           <Card className="lift"><div className="text-xs text-mut">Apps con acceso</div><div className="text-2xl font-bold mt-1.5 tabular-nums">{access ? access.length : '…'}</div></Card>
         </div>
 
-        {topupCfg?.enabled && locations.length > 0 && (
+        {(walletOn || cardOn) && locations.length > 0 && (
           <Card className="mb-6 border-gold/30">
             <div className="flex flex-col lg:flex-row lg:items-center gap-4">
               <div className="flex-1">
                 <h2 className="text-sm font-semibold flex items-center gap-2"><Wallet size={15} className="text-gold" /> Recargar saldo</h2>
                 <p className="text-[11px] text-ink2 mt-1">
-                  Se cobra de tu wallet de GoHighLevel y se abona como crédito al instante. El crédito se consume antes que el wallet.
+                  {cardOn
+                    ? <>Elige el importe y págalo con tarjeta (pago seguro de Stripe). Se suma a tu saldo en cuanto se confirma el pago y con él se pagan tus apps.{walletOn && ' También puedes pasarlo desde tu monedero de GoHighLevel.'}</>
+                    : 'Se cobra de tu wallet de GoHighLevel y se abona como crédito al instante. El crédito se consume antes que el wallet.'}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -186,15 +238,34 @@ export default function UserPortal({ me, onLogout, asLocation = null, onPickLoca
                   value={topupAmt} onChange={(e) => setTopupAmt(e.target.value)}
                   className="w-24 bg-bg border border-border rounded-xl px-3 py-2 text-sm outline-none focus:border-gold/60"
                 />
-                <Button
-                  disabled={preview || topupBusy || !topupLoc || !topupValid || !topupWalletOk} onClick={doTopup}
-                  title={preview ? 'Solo lectura en «Ver como cliente»: para recargar en su nombre usa Créditos → Recargar desde wallet' : undefined}
-                >
-                  {topupBusy ? 'Cobrando…' : 'Recargar'}
-                </Button>
+                {cardOn && (
+                  <Button
+                    disabled={preview || topupBusy || Boolean(cardWait) || !topupLoc || !topupValid} onClick={doCardTopup}
+                    title={preview ? 'Solo lectura en «Ver como cliente»' : 'Pago seguro con tarjeta (Stripe)'}
+                  >
+                    <CreditCard size={15} className="inline -mt-0.5 mr-1" />{topupBusy ? 'Abriendo…' : 'Pagar con tarjeta'}
+                  </Button>
+                )}
+                {walletOn && (
+                  <Button
+                    variant={cardOn ? 'ghost' : undefined}
+                    disabled={preview || topupBusy || !topupLoc || !topupValid || !topupWalletOk} onClick={doTopup}
+                    title={preview ? 'Solo lectura en «Ver como cliente»: para recargar en su nombre usa Créditos → Recargar desde wallet' : 'Se cobra de tu monedero de GoHighLevel'}
+                  >
+                    {topupBusy ? 'Cobrando…' : cardOn ? 'Desde mi monedero de GHL' : 'Recargar'}
+                  </Button>
+                )}
               </div>
             </div>
-            {topupLoc && !topupWalletOk && (
+            {cardWait && (
+              <div className="text-xs text-ink2 mt-3 flex flex-wrap items-center gap-3">
+                <span className="w-3.5 h-3.5 rounded-full border-2 border-border border-t-gold spin" />
+                Esperando el pago de {fmtUsd(cardWait.amount)} en Stripe… el saldo se sumará solo al confirmarse.
+                <a href={cardWait.url} target="_blank" rel="noopener noreferrer" className="text-gold hover:underline">Abrir el pago</a>
+                <button type="button" className="text-mut hover:text-ink" onClick={() => setCardWait(null)}>Dejar de esperar</button>
+              </div>
+            )}
+            {walletOn && topupLoc && !topupWalletOk && (
               <div className="text-[11px] text-warn mt-2">
                 Tu agencia aún no ha activado la recarga desde tu monedero de GoHighLevel en esta subcuenta. Pídeselo y podrás recargar.
               </div>
