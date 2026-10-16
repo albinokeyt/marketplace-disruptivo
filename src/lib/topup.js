@@ -4,6 +4,7 @@ import { getSetting, isGlobalTestMode } from './settings.js'
 import { generateApiKey } from './crypto.js'
 import { executeCharge } from './charges.js'
 import { getBalance } from './credits.js'
+import { walletEnabled, TOPUP_OFF_MSG, WALLET_OFF_CODE } from './wallet.js'
 import * as ghl from './ghl.js'
 
 // Recarga = cobro REAL al wallet de GHL (meter de recarga, precio FIJO 1.00/unidad → unidades = USD)
@@ -132,6 +133,9 @@ export async function createTopup({ locationId, amount, userId = null, log }) {
   const app = await getSystemApp()
   if (app.status !== 'active') throw fail(409, 'La app interna de recargas está desactivada')
   const testMode = (await isGlobalTestMode()) || conn.test_mode
+  // la recarga ES un cobro al monedero de GHL: solo donde está verificado que paga el cliente, nunca la agencia
+  // (en modo prueba no se cobra nada, así que no aplica)
+  if (!testMode && !walletEnabled(conn)) throw Object.assign(fail(409, TOPUP_OFF_MSG), { code: WALLET_OFF_CODE })
 
   let row
   try {

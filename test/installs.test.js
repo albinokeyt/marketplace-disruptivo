@@ -2,8 +2,9 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import crypto from 'node:crypto'
 import {
-  verifyGhlSignature, callbackUriFrom, isOurCompany, parseInstalledLocations, hasScope, SELF_HEAL,
+  verifyGhlSignature, callbackUriFrom, isOurCompany, parseInstalledLocations, hasScope, SELF_HEAL, isForeignCompany,
 } from '../src/lib/installRules.js'
+import { walletEnabled } from '../src/lib/wallet.js'
 
 const pem = (k) => k.export({ type: 'spki', format: 'pem' })
 
@@ -74,4 +75,25 @@ test('hasScope y estados que se reparan solos', () => {
   // la desconexión manual del administrador NUNCA se deshace sola
   assert.equal(SELF_HEAL.includes('disconnected'), false)
   assert.deepEqual([...SELF_HEAL].sort(), ['awaiting', 'error', 'uninstalled'])
+})
+
+test('isForeignCompany: solo es «otra agencia» con companyId y con nuestra agencia configurada', () => {
+  const cfg = { company_id: 'COMP' }
+  assert.equal(isForeignCompany('OTRA', cfg, {}), true)
+  assert.equal(isForeignCompany('COMP', cfg, {}), false)
+  assert.equal(isForeignCompany(' COMP ', cfg, {}), false)
+  assert.equal(isForeignCompany('C2', cfg, { company_ids: ['C2'] }), false) // también vale la lista de admins SSO
+  assert.equal(isForeignCompany('', cfg, {}), false) // sin companyId no se puede afirmar
+  assert.equal(isForeignCompany(null, cfg, {}), false)
+  // sin nuestra agencia configurada no hay con qué comparar: nunca se bloquea a nadie por esto
+  assert.equal(isForeignCompany('OTRA', {}, {}), false)
+  assert.equal(isForeignCompany('OTRA', { company_id: '' }, { company_ids: [] }), false)
+})
+
+test('walletEnabled: solo con wallet_ok === true (por defecto el monedero de GHL NO se usa)', () => {
+  assert.equal(walletEnabled({ wallet_ok: true }), true)
+  assert.equal(walletEnabled({ wallet_ok: false }), false)
+  assert.equal(walletEnabled({}), false)
+  assert.equal(walletEnabled(null), false)
+  assert.equal(walletEnabled({ wallet_ok: 'true' }), false)
 })

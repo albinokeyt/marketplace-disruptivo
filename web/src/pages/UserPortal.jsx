@@ -46,6 +46,8 @@ export default function UserPortal({ me, onLogout, asLocation = null, onPickLoca
   }, [asLocation])
 
   const previewName = locations[0]?.name || asLocation
+  // la recarga sale del monedero de GHL de la subcuenta: solo si la agencia lo ha verificado (si no, lo pagaría ella)
+  const topupWalletOk = Boolean(locations.find((l) => l.location_id === topupLoc)?.wallet_ok)
 
   // contratar un plan con el saldo: se cobra el primer periodo ahora y el acceso se activa al momento
   const buyLocation = buyLoc || locations[0]?.location_id || ''
@@ -54,7 +56,8 @@ export default function UserPortal({ me, onLogout, asLocation = null, onPickLoca
   const buyPlan = async (p) => {
     if (!buyLocation) return alert('No hay ninguna subcuenta seleccionada')
     const periodo = p.period_months === 1 ? 'mes' : `${p.period_months} meses`
-    if (!window.confirm(`Se cobrarán ${Number(p.price).toFixed(2)} USD de tu saldo (o de tu wallet de GoHighLevel) por «${p.name}», y se renovará cada ${periodo}. ¿Continuar?`)) return
+    const conWallet = Boolean(locations.find((l) => l.location_id === buyLocation)?.wallet_ok)
+    if (!window.confirm(`Se cobrarán ${Number(p.price).toFixed(2)} USD de tu saldo${conWallet ? ' (o de tu wallet de GoHighLevel)' : ''} por «${p.name}», y se renovará cada ${periodo}. ¿Continuar?`)) return
     setBuyBusy(p.id)
     try {
       const r = await api.post('/api/me/subscriptions', { location_id: buyLocation, plan_id: p.id })
@@ -184,13 +187,18 @@ export default function UserPortal({ me, onLogout, asLocation = null, onPickLoca
                   className="w-24 bg-bg border border-border rounded-xl px-3 py-2 text-sm outline-none focus:border-gold/60"
                 />
                 <Button
-                  disabled={preview || topupBusy || !topupLoc || !topupValid} onClick={doTopup}
+                  disabled={preview || topupBusy || !topupLoc || !topupValid || !topupWalletOk} onClick={doTopup}
                   title={preview ? 'Solo lectura en «Ver como cliente»: para recargar en su nombre usa Créditos → Recargar desde wallet' : undefined}
                 >
                   {topupBusy ? 'Cobrando…' : 'Recargar'}
                 </Button>
               </div>
             </div>
+            {topupLoc && !topupWalletOk && (
+              <div className="text-[11px] text-warn mt-2">
+                Tu agencia aún no ha activado la recarga desde tu monedero de GoHighLevel en esta subcuenta. Pídeselo y podrás recargar.
+              </div>
+            )}
             <div className="text-[11px] text-mut mt-2">
               Entre {topupCfg.min} y {topupCfg.max} USD.
               {usage?.topups?.all_time > 0 && <> Recargado hasta ahora: <span className="text-ok">{fmtUsd(usage.topups.all_time)}</span>.</>}

@@ -1,6 +1,7 @@
 import { q, numOr } from '../db.js'
 import { getGhlConfig, isGlobalTestMode } from './settings.js'
 import { refundChargeCredit, reverseTopupCredit, restoreTopupCredit } from './credits.js'
+import { walletEnabled, WALLET_OFF_CODE, WALLET_OFF_MSG } from './wallet.js'
 import * as ghl from './ghl.js'
 
 // límites de las columnas numeric(12,6) / numeric(14,6)
@@ -167,11 +168,13 @@ export const deleteRejected = (err) =>
 // Ejecuta el cargo contra GHL sobre una fila ya reservada en estado pending. Devuelve la fila actualizada.
 export async function executeCharge(rowId, input, log) {
   const cfg = await getGhlConfig()
-  const abort = async (message) => {
+  const abort = async (message, code = null) => {
     await q(`UPDATE charges SET status='failed', error=$1, updated_at=now() WHERE id=$2 AND status='pending'`,
       [message.slice(0, 500), rowId])
-    throw fail(409, message)
+    throw fail(409, message, code)
   }
+  // sin monedero propio verificado, GHL podría cobrárselo a la agencia: no se envía nada a GHL
+  if (!walletEnabled(input.conn)) return abort(WALLET_OFF_MSG, WALLET_OFF_CODE)
   if (!cfg.app_id) return abort('Falta el app_id de la app del marketplace en Configuración')
   const companyId = input.conn.company_id || cfg.company_id
   if (!companyId) return abort('La conexión no tiene companyId (agencia): reconecta la subcuenta desde el panel')

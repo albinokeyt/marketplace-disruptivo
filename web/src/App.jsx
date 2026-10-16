@@ -63,8 +63,27 @@ function ClientPreview({ me }) {
   )
 }
 
+// Dentro de GHL, cuando el servidor explica por qué no hay acceso (otra agencia, subcuenta sin la app…)
+function SsoInfo({ info, onLogin }) {
+  return (
+    <div className="min-h-screen grid place-items-center relative px-4">
+      <div className="app-bg" aria-hidden="true" />
+      <div className="relative z-10 max-w-lg w-full bg-card border border-border rounded-2xl p-8 text-center">
+        <div className="text-3xl mb-3" aria-hidden="true">ℹ️</div>
+        <h1 className="text-lg font-semibold mb-3">Marketplace Disruptivo</h1>
+        <p className="text-sm text-ink2 leading-relaxed">{info.error}</p>
+        {info.error_en && <p className="text-xs text-mut leading-relaxed mt-3">{info.error_en}</p>}
+        <button type="button" className="text-xs text-mut hover:text-gold mt-6" onClick={onLogin}>
+          Entrar con usuario y contraseña
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function AdminApp({ location }) {
   const [me, setMe] = useState(null) // null = cargando · false = sin sesión · { role, email, name }
+  const [ssoInfo, setSsoInfo] = useState(null) // GHL nos identificó pero no hay acceso (p. ej. otra agencia)
 
   const loadMe = async () => {
     try { return await api.get('/api/admin/me') } catch { return null }
@@ -74,8 +93,13 @@ function AdminApp({ location }) {
     let alive = true
     ;(async () => {
       let m = await loadMe()
-      if (!m) { if (await trySsoLogin()) m = await loadMe() }
-      if (alive) setMe(m || false)
+      let info = null
+      if (!m) {
+        const sso = await trySsoLogin()
+        if (sso.ok) m = await loadMe()
+        else if (sso.error) info = sso
+      }
+      if (alive) { setSsoInfo(info); setMe(m || false) }
     })()
     return () => { alive = false }
   }, [])
@@ -96,6 +120,7 @@ function AdminApp({ location }) {
       </div>
     )
   }
+  if (!me && ssoInfo) return <SsoInfo info={ssoInfo} onLogin={() => setSsoInfo(null)} />
   if (!me) return <Login onLogin={async () => setMe((await loadMe()) || false)} />
   if (me.role === 'user') return <UserPortal me={me} onLogout={logout} />
   // admin «viendo como cliente»: el portal a pantalla completa, tal cual lo ve esa subcuenta

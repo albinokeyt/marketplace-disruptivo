@@ -6,6 +6,7 @@ import { checkAccess } from '../lib/access.js'
 import { trySpendCredit, getBalance } from '../lib/credits.js'
 import { getTopupConfig } from '../lib/topup.js'
 import { getGhlConfig } from '../lib/settings.js'
+import { walletEnabled } from '../lib/wallet.js'
 import * as ghl from '../lib/ghl.js'
 
 // Para que las apps enlacen al portal del cliente dentro de GHL («gestiona tu suscripción», «paga con tu saldo»)
@@ -56,13 +57,14 @@ export default async function publicApiRoutes(app) {
   // agencia. El cargo queda 'failed' y se puede reenviar con el MISMO event_id cuando haya saldo.
   app.post('/api/v1/charges', async (req, reply) => {
     const consumer = req.consumerApp
-    const soloCredito = String(req.body?.pay_with || '').trim().toLowerCase() === 'credit'
     let input
     try {
       input = await resolveChargeInput(consumer, req.body)
     } catch (err) {
       return reply.code(err.statusCode || 400).send({ error: err.message, ...(err.code ? { code: err.code } : {}) })
     }
+    // sin monedero propio verificado el cargo se paga como «solo crédito»: GHL podría cobrárselo a la agencia
+    const soloCredito = String(req.body?.pay_with || '').trim().toLowerCase() === 'credit' || !walletEnabled(input.conn)
     // `code` es un identificador ESTABLE para que las apps ramifiquen sin depender del texto del mensaje
     if (input.meter.code === (await topupMeterCode())) {
       return reply.code(403).send({
@@ -208,12 +210,15 @@ export default async function publicApiRoutes(app) {
     if (conn.status !== 'connected') return reply.code(409).send({ error: `Conexión en estado "${conn.status}"` })
     // el crédito interno se consume ANTES que el wallet: si hay saldo, hay fondos
     const credit = await getBalance(req.params.locationId)
-    if (credit > 0) return { hasFunds: true, credit, wallet_has_funds: null }
-    // ?pay_with=credit → la app solo cobra del saldo del marketplace: el wallet no cuenta
-    if (String(req.query?.pay_with || '').toLowerCase() === 'credit') return { hasFunds: false, credit, wallet_has_funds: null }
+    const wallet_enabled = walletEnabled(conn)
+    if (credit > 0) return { hasFunds: true, credit, wallet_has_funds: null, wallet_enabled }
+    // ?pay_with=credit (o monedero no verificado) → solo cuenta el saldo del marketplace: el wallet no se usa
+    if (String(req.query?.pay_with || '').toLowerCase() === 'credit' || !wallet_enabled) {
+      return { hasFunds: false, credit, wallet_has_funds: null, wallet_enabled }
+    }
     try {
       const data = await ghl.hasFunds(conn.id)
-      return { hasFunds: Boolean(data?.hasFunds), credit, wallet_has_funds: Boolean(data?.hasFunds) }
+      return { hasFunds: Boolean(data?.hasFunds), credit, wallet_has_funds: Boolean(data?.hasFunds), wallet_enabled }
     } catch (err) {
       return reply.code(502).send({ error: `GHL no respondió: ${err.message}` })
     }

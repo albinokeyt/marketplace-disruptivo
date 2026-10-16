@@ -5,6 +5,7 @@ import { trySpendCredit, getBalance } from './credits.js'
 import { getSystemApp } from './topup.js'
 import { normalizeBillingConfig, addMonths, afterFailure, LEAD_HOURS } from './billingRules.js'
 import { checkAccess } from './access.js'
+import { walletEnabled } from './wallet.js'
 import { hasFunds } from './ghl.js'
 
 const fail = (statusCode, message) => { const e = new Error(message); e.statusCode = statusCode; return e }
@@ -93,8 +94,9 @@ export async function chargeSubscriptionOnce(sub, cfg, log) {
 
   if (testMode) return { charged: true, test_mode: true, charge: row }
 
-  // el crédito interno se consume ANTES que el wallet (igual que en el cobro por uso)
-  if (inserted) {
+  // el crédito interno se consume ANTES que el wallet (igual que en el cobro por uso). Sin monedero propio
+  // verificado también en los reintentos: el wallet no se puede usar, y un 'failed' nunca llegó a cobrarse en GHL
+  if (inserted || !walletEnabled(conn)) {
     const credit = await trySpendCredit(row.id, sub.location_id, price)
     if (credit.ok) return { charged: true, charge: credit.row }
     if (credit.reason === 'not_pending') {
@@ -198,9 +200,12 @@ export async function purchasePlan({ locationId, planId, userId = null, log }) {
     const acc = await checkAccess(a.id, locationId)
     if (acc.access) throw fail(409, `Ya tienes acceso a ${a.name}${acc.ends_at ? ' hasta el ' + new Date(acc.ends_at).toLocaleDateString('es-ES') : ''}`)
   }
-  // fondos ANTES de crear nada: crédito interno o, si no llega, el wallet de GHL
+  // fondos ANTES de crear nada: crédito interno o, si no llega, el wallet de GHL (solo con monedero propio verificado:
+  // si no, GHL podría cobrárselo a la agencia)
   const credit = await getBalance(locationId)
   if (credit < price) {
+    const testConn = (await isGlobalTestMode()) || conn.test_mode
+    if (!testConn && !walletEnabled(conn)) throw fail(402, `Saldo insuficiente para ${price.toFixed(2)} USD: recarga tu saldo del marketplace y vuelve a intentarlo`)
     let wallet = false
     try { wallet = Boolean((await hasFunds(conn.id))?.hasFunds) } catch { wallet = false }
     if (!wallet) throw fail(402, `Saldo insuficiente para ${price.toFixed(2)} USD: recarga tu saldo o tu wallet de GoHighLevel y vuelve a intentarlo`)

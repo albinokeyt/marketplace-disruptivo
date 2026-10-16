@@ -157,10 +157,12 @@ test('callback con token de AGENCIA (instalación masiva): guarda el token y con
   assert.equal(listCall.query.companyId, 'COMP')
 })
 
-test('callback sin state de otra agencia: se rechaza y no guarda nada', async () => {
+test('callback sin state de otra agencia (app pública, p. ej. revisión de GHL): página informativa, no guarda nada', async () => {
   const res = await app.inject({ method: 'GET', url: '/api/oauth/callback?code=OTRA', headers: { host: 'marketplace.test' } })
-  assert.equal(res.statusCode, 500)
-  assert.match(res.body, /no autorizada/)
+  assert.equal(res.statusCode, 200)
+  assert.match(res.body, /Tu agencia no está dada de alta/)
+  assert.match(res.body, /Your agency is not enrolled/)
+  assert.doesNotMatch(res.body, /Error al conectar/)
   assert.equal((await q('SELECT 1 FROM agency_tokens WHERE company_id=$1', ['OTRA-AGENCIA'])).rows.length, 0)
 })
 

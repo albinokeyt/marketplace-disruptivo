@@ -5,19 +5,19 @@ import { getGhlConfig } from '../lib/settings.js'
 import { buildAuthUrl, exchangeCode, DEFAULT_SCOPES } from '../lib/ghl.js'
 import { requireAdmin } from '../lib/session.js'
 import { ourCompanyIds, saveAgencyToken, syncInstalledLocations, upsertConnectionFromToken } from '../lib/installs.js'
-import { callbackUriFrom } from '../lib/installRules.js'
+import { callbackUriFrom, isForeignCompany, FOREIGN_AGENCY_MSG, FOREIGN_AGENCY_MSG_EN } from '../lib/installRules.js'
 
 const redirectUri = () => `${config.appBaseUrl}/api/oauth/callback`
 
 const escapeHtml = (s) =>
   String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 
-const page = (msg, ok = false) => `<!doctype html><html lang="es"><head><meta charset="utf-8">
+const page = (msg, ok = false, icon = null) => `<!doctype html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>Marketplace Disruptivo</title>
 <style>body{font-family:system-ui,sans-serif;background:#0f1117;color:#e8e6e0;display:grid;place-items:center;min-height:100vh;margin:0}
 .card{background:#181b23;border:1px solid #2a2e3a;border-radius:14px;padding:40px;max-width:480px;text-align:center;line-height:1.55}
 .icon{font-size:40px;margin-bottom:12px}b{color:#d9b45b}small{color:#8b8f9c}</style></head>
-<body><div class="card"><div class="icon">${ok ? '✅' : '⚠️'}</div><p>${msg}</p></div></body></html>`
+<body><div class="card"><div class="icon">${icon || (ok ? '✅' : '⚠️')}</div><p>${msg}</p></div></body></html>`
 
 export default async function oauthRoutes(app) {
   app.get('/api/oauth/url', { preHandler: requireAdmin }, async (req, reply) => {
@@ -40,7 +40,14 @@ export default async function oauthRoutes(app) {
       // el canje usa la URL exacta a la que GHL redirigió (dominio nuevo o el viejo, según la app)
       const tok = await exchangeCode(code, callbackUriFrom(req.hostname, redirectUri()))
       const companyId = String(tok.companyId || tok.company_id || '').trim()
-      const { check } = await ourCompanyIds()
+      const { check, cfg: ghlCfg, admins } = await ourCompanyIds()
+      if (!stateOk && isForeignCompany(companyId, ghlCfg, admins)) {
+        // la app es pública: otra agencia (o el equipo de revisión de GHL) puede instalarla. No es un error: se le
+        // explica qué es la app y no se guarda ningún token, así que no se conecta ni se cobra nada.
+        req.log.info({ companyId, locationId: tok.locationId || null }, 'instalación de otra agencia: solo se informa')
+        return reply.type('text/html').send(page(
+          `${escapeHtml(FOREIGN_AGENCY_MSG)}<br><br><small>${escapeHtml(FOREIGN_AGENCY_MSG_EN)}</small>`, false, 'ℹ️'))
+      }
       if (!stateOk && !check(companyId)) {
         throw new Error('Instalación no autorizada: inicia la conexión desde el panel, o configura el Company ID de tu agencia en Configuración para permitir instalaciones directas desde GHL.')
       }

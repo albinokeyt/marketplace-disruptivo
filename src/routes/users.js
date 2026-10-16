@@ -107,7 +107,7 @@ export default async function userRoutes(app) {
     const scope = await scopeFor(req.session, previewOf(req))
     const locs = scope.all ? [] : scope.locs
     const { rows } = locs.length
-      ? await q(`SELECT location_id, COALESCE(NULLIF(alias,''), name, location_id) AS name FROM connections WHERE location_id = ANY($1)`, [locs])
+      ? await q(`SELECT location_id, COALESCE(NULLIF(alias,''), name, location_id) AS name, wallet_ok FROM connections WHERE location_id = ANY($1)`, [locs])
       : { rows: [] }
     return { role: req.session.role, locations: rows, preview: Boolean(scope.preview) }
   })

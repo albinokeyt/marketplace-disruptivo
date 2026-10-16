@@ -11,8 +11,8 @@ import { normalizeBillingConfig } from '../lib/billingRules.js'
 import { refundCharge, reconcileCharge, publicCharge } from '../lib/charges.js'
 import { UNKNOWN_GRACE_MS } from '../lib/reconciler.js'
 import { decryptGhlSso, ssoAuthorized } from '../lib/sso.js'
-import { ensureConnection, syncInstalledLocations, agencyTokenInfo } from '../lib/installs.js'
-import { SELF_HEAL } from '../lib/installRules.js'
+import { ensureConnection, syncInstalledLocations, agencyTokenInfo, ourCompanyIds } from '../lib/installs.js'
+import { SELF_HEAL, isForeignCompany, FOREIGN_AGENCY_CODE, FOREIGN_AGENCY_MSG, FOREIGN_AGENCY_MSG_EN } from '../lib/installRules.js'
 import * as ghl from '../lib/ghl.js'
 
 const LOGIN_MAX_FAILS = 10
@@ -93,6 +93,12 @@ export default async function adminRoutes(app) {
       healConnection().catch(() => {})
       await createSession(req, reply, { userId: `sso:${String(identity.email || '').toLowerCase()}`, role: 'admin', crossSite: true })
       return { ok: true, role: 'admin' }
+    }
+    // OTRA AGENCIA (la app es pública: p. ej. el equipo de revisión de GHL): se le explica qué es la app y no se
+    // da de alta nada (ni conexión ni sesión)
+    const ours = await ourCompanyIds()
+    if (isForeignCompany(identity.companyId, ours.cfg, ours.admins)) {
+      return reply.code(403).send({ code: FOREIGN_AGENCY_CODE, error: FOREIGN_AGENCY_MSG, error_en: FOREIGN_AGENCY_MSG_EN })
     }
     // CLIENTE: cualquier otro usuario que abra la Custom Page desde una subcuenta con la app instalada
     // entra a SU portal (saldo, recargas, consumo, accesos) limitado a esa subcuenta. La identidad y la
@@ -345,7 +351,7 @@ export default async function adminRoutes(app) {
     const { rows } = await q(
       `SELECT k.id, k.location_id, k.company_id, k.alias, k.name, k.test_mode, k.status,
               k.created_at, k.updated_at, (k.refresh_token IS NOT NULL) AS has_tokens,
-              k.source, k.last_error, k.installed_at, k.uninstalled_at,
+              k.source, k.last_error, k.installed_at, k.uninstalled_at, k.wallet_ok, k.wallet_ok_at,
               COUNT(c.id)::int AS charges_count,
               COALESCE(SUM(c.amount) FILTER (WHERE c.status='created' AND c.paid_with='wallet'), 0) AS amount_total,
               COALESCE(SUM(c.amount) FILTER (WHERE c.status='created' AND c.paid_with='credit'), 0) AS credit_total
@@ -388,15 +394,21 @@ export default async function adminRoutes(app) {
 
   app.patch('/api/admin/connections/:id', guard, async (req, reply) => {
     const id = numOr(req.params.id)
-    const { alias, test_mode } = req.body || {}
+    const { alias, test_mode, wallet_ok } = req.body || {}
+    // wallet_ok = «monedero propio verificado»: el admin confirma que GHL cobra a ESTA subcuenta (reventa de la app
+    // + refacturación con tarjeta) y no a la agencia. Sin esa marca el marketplace no cobra nada de su monedero.
+    const wallet = typeof wallet_ok === 'boolean' ? wallet_ok : null
     const { rows: [row] } = await q(
       `UPDATE connections SET
          alias = COALESCE($1, alias),
          test_mode = COALESCE($2, test_mode),
+         wallet_ok = COALESCE($4, wallet_ok),
+         wallet_ok_at = CASE WHEN $4 IS NULL THEN wallet_ok_at WHEN $4 THEN now() ELSE NULL END,
          updated_at = now()
-       WHERE id=$3 RETURNING id, location_id, alias, name, test_mode, status`,
-      [alias ?? null, typeof test_mode === 'boolean' ? test_mode : null, id]
+       WHERE id=$3 RETURNING id, location_id, alias, name, test_mode, status, wallet_ok, wallet_ok_at`,
+      [alias ?? null, typeof test_mode === 'boolean' ? test_mode : null, id, wallet]
     )
+    if (row && wallet !== null) req.log.info({ connectionId: id, locationId: row.location_id, wallet_ok: wallet }, 'monedero propio cambiado')
     if (!row) return reply.code(404).send({ error: 'Conexión no encontrada' })
     return { connection: row }
   })

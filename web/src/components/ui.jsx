@@ -109,8 +109,8 @@ export const Modal = ({ title, onClose, children }) => (
   </div>
 )
 
-export const Th = ({ children, className = '' }) => (
-  <th className={`text-left text-[11px] uppercase tracking-wide text-mut font-medium px-3 py-2 ${className}`}>
+export const Th = ({ children, className = '', ...rest }) => (
+  <th {...rest} className={`text-left text-[11px] uppercase tracking-wide text-mut font-medium px-3 py-2 ${className}`}>
     {children}
   </th>
 )

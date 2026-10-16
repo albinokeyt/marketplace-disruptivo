@@ -28,11 +28,13 @@ function requestGhlUserData(timeoutMs = 5000) {
   })
 }
 
-// Devuelve true si dejó sesión admin iniciada por SSO. false si no aplica o falló (→ login normal).
+// Devuelve { ok: true } si dejó sesión iniciada por SSO. { ok: false } si no aplica (→ login normal), o
+// { ok: false, error, code, error_en } si GHL nos identificó pero el servidor explica por qué no hay acceso
+// (p. ej. otra agencia): entonces se muestra ese mensaje en vez del formulario de acceso.
 export async function trySsoLogin() {
-  if (!isEmbedded()) return false
+  if (!isEmbedded()) return { ok: false }
   const encrypted = await requestGhlUserData()
-  if (!encrypted) return false
+  if (!encrypted) return { ok: false }
   try {
     const res = await fetch('/api/admin/sso', {
       method: 'POST',
@@ -40,8 +42,10 @@ export async function trySsoLogin() {
       credentials: 'same-origin',
       body: JSON.stringify({ encrypted }),
     })
-    return res.ok
+    if (res.ok) return { ok: true }
+    const d = await res.json().catch(() => ({}))
+    return { ok: false, error: d.error || null, error_en: d.error_en || null, code: d.code || null }
   } catch {
-    return false
+    return { ok: false }
   }
 }

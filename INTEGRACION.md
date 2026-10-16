@@ -70,6 +70,12 @@ Content-Type: application/json
 
 El importe es `units × price_per_unit`, redondeado a 6 decimales. Divisa: **USD** (GHL solo admite USD).
 
+**Quién paga.** Primero el **saldo del marketplace** (lo que el cliente recargó). El **monedero de GoHighLevel** solo se
+usa si el administrador ha marcado la subcuenta como «monedero propio verificado»: GoHighLevel cobra los cargos de
+una app al monedero de la **agencia** salvo que la subcuenta tenga la reventa con refacturación, así que sin esa marca
+el marketplace nunca toca el monedero. Con `"pay_with": "credit"` en el cuerpo no se usa nunca, esté marcada o no.
+Si el saldo no llega y el monedero no se puede usar, la respuesta es `402 INSUFFICIENT_CREDIT` (ver abajo).
+
 ### Respuestas
 
 | HTTP | Cuerpo | Qué significa y qué hacer |
@@ -79,6 +85,7 @@ El importe es `units × price_per_unit`, redondeado a 6 decimales. Divisa: **USD
 | **200** | `{ "idempotent": true, "reconciled": true, … }` | Un intento anterior sí había cobrado en GHL; se recuperó. No cobres otra vez |
 | **400** | `{ "error": "…" }` | Falta un campo o es inválido. Corrige la petición (reintentar igual no sirve) |
 | **403** | `{ "error": "…", "code"?: "…" }` | Con `code: "LOCATION_NOT_ALLOWED"` tu API key no puede operar con esa subcuenta (alcance limitado por el administrador). Con `code: "CHARGES_DISABLED"` el administrador ha cortado los cobros de tu app: deja de cobrar y sigue sirviendo o para, según tu producto (el resto de la API sigue funcionando). Ramifica por `code`, no por el texto |
+| **402** | `{ "code": "INSUFFICIENT_CREDIT", "error": "…", "credit": 0.4, "charge": {…} }` | El saldo del marketplace no llega y el monedero de GHL no se puede usar (`pay_with: "credit"` o subcuenta sin monedero propio verificado). El cargo queda `failed`: avisa al cliente de que recargue y **reintenta con el mismo `event_id`** cuando haya saldo |
 | **404** | `{ "error": "…" }` | Tarifa inexistente/inactiva, o subcuenta no conectada |
 | **409** | `{ "error": "…", "charge_id": 12 }` | Ese `event_id` tiene un cobro **en curso**. Espera unos segundos y **reintenta con el mismo `event_id`** |
 | **429** | `{ "error": "…" }` | Superaste el límite de peticiones/min. Respeta la cabecera `X-RateLimit-Remaining` y reintenta |
@@ -192,12 +199,13 @@ export async function cobrar({ locationId, meter, units, eventId, price, descrip
 
 ```http
 GET /api/v1/locations/:locationId/has-funds
-→ 200 { "hasFunds": true, "credit": 12.5, "wallet_has_funds": null }
+→ 200 { "hasFunds": true, "credit": 12.5, "wallet_has_funds": null, "wallet_enabled": false }
 ```
 
 `credit` es el saldo interno (se gasta **antes** que el wallet). Si `credit > 0`, `hasFunds` es `true` sin
-preguntar a GHL y `wallet_has_funds` viene a `null`. Errores: `404` no conectada · `409` conexión caída ·
-`502` GHL no respondió.
+preguntar a GHL y `wallet_has_funds` viene a `null`. `wallet_enabled` dice si esa subcuenta puede pagar con su
+monedero de GHL (monedero propio verificado); si es `false`, o pasas `?pay_with=credit`, solo cuenta el saldo y no se
+pregunta a GHL. Errores: `404` no conectada · `409` conexión caída · `502` GHL no respondió.
 
 **No reserva nada:** el saldo lo comparten todas las apps del marketplace, así que entre tu comprobación y tu
 cobro otro puede haberlo consumido. Úsalo como semáforo previo, nunca como garantía.

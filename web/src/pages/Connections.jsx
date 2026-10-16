@@ -10,7 +10,6 @@ export default function Connections() {
   const [conns, setConns] = useState(null)
   const [agencies, setAgencies] = useState([])
   const [error, setError] = useState('')
-  const [funds, setFunds] = useState({}) // id -> true/false/'…'
   const [syncing, setSyncing] = useState(false)
   const [syncMsg, setSyncMsg] = useState('')
 
@@ -60,15 +59,18 @@ export default function Connections() {
     }
   }
 
-  const checkFunds = async (c) => {
-    setFunds((f) => ({ ...f, [c.id]: '…' }))
-    try {
-      const d = await api.post(`/api/admin/connections/${c.id}/check-funds`)
-      setFunds((f) => ({ ...f, [c.id]: d.hasFunds }))
-    } catch (err) {
-      setFunds((f) => ({ ...f, [c.id]: undefined }))
-      alert(err.message)
-    }
+  // «Monedero propio verificado»: solo entonces el marketplace cobra del monedero de GHL de la subcuenta.
+  // GHL cobra a la AGENCIA salvo que la app se revenda y la subcuenta tenga refacturación con tarjeta.
+  const toggleWallet = async (c, v) => {
+    const nombre = c.alias || c.name || c.location_id
+    if (v && !confirm(
+      `¿Activar el pago con monedero en ${nombre}?\n\n` +
+      'Confírmalo solo si en GoHighLevel esta subcuenta tiene Marketplace Disruptivo en Reventa con refacturación activa y una tarjeta: ' +
+      'así los cobros salen de SU monedero y no del de la agencia.\n\n' +
+      'Mientras esté apagado, esta subcuenta solo puede pagar con el saldo del marketplace y no puede recargar desde su monedero.'
+    )) return
+    await api.patch(`/api/admin/connections/${c.id}`, { wallet_ok: v }).catch((e) => alert(e.message))
+    load()
   }
 
   const rename = async (c) => {
@@ -143,7 +145,7 @@ export default function Connections() {
                 <Th>Location ID</Th>
                 <Th className="text-right">Cobros</Th>
                 <Th className="text-right">Facturado</Th>
-                <Th>Saldo</Th>
+                <Th title="Solo con esto activado se cobra del monedero de GoHighLevel de la subcuenta (si no, GHL se lo cobraría a la agencia)">Monedero propio</Th>
                 <Th>Prueba</Th>
                 <Th>Estado</Th>
                 <Th></Th>
@@ -168,17 +170,10 @@ export default function Connections() {
                   <Td className="text-right tabular-nums">{c.charges_count}</Td>
                   <Td className="text-right tabular-nums">{fmtUsd(c.amount_total)}</Td>
                   <Td>
-                    {funds[c.id] === undefined ? (
-                      <button className="text-xs text-ink2 hover:text-gold" onClick={() => checkFunds(c)}>
-                        <Wallet size={14} className="inline -mt-0.5" /> Comprobar
-                      </button>
-                    ) : funds[c.id] === '…' ? (
-                      <span className="text-xs text-mut">…</span>
-                    ) : funds[c.id] ? (
-                      <span className="text-xs text-ok">Con saldo</span>
-                    ) : (
-                      <span className="text-xs text-bad">Sin saldo</span>
-                    )}
+                    <div className="flex items-center gap-2" title={c.wallet_ok ? `Verificado ${fmtDate(c.wallet_ok_at)}: se cobra de su monedero` : 'Sin verificar: solo paga con el saldo del marketplace'}>
+                      <Toggle checked={Boolean(c.wallet_ok)} onChange={(v) => toggleWallet(c, v)} />
+                      <Wallet size={14} className={c.wallet_ok ? 'text-ok' : 'text-mut'} />
+                    </div>
                   </Td>
                   <Td><Toggle checked={c.test_mode} onChange={(v) => toggleTest(c, v)} /></Td>
                   <Td><Badge status={c.status} /></Td>
