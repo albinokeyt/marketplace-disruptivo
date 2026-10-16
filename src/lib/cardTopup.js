@@ -57,7 +57,7 @@ export async function createCardTopup({ locationId, amount, userId = null, email
     return { id: row.id, url: session.url, amount: value }
   } catch (err) {
     await q(`UPDATE card_topups SET status='failed', error=$2, updated_at=now() WHERE id=$1`, [row.id, String(err.message).slice(0, 500)])
-    throw fail(err.statusCode || 502, `No se pudo abrir el pago: ${err.message}`)
+    throw fail(err.statusCode && err.statusCode < 500 ? 503 : 502, 'No se pudo abrir el pago seguro en este momento. Inténtalo de nuevo en unos minutos o escríbenos a departamentodisruptivo@gmail.com.')
   }
 }
 

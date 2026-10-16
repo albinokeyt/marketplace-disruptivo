@@ -281,7 +281,7 @@ export default async function userRoutes(app) {
       if (r.status === 'paid') {
         return reply.type('text/html').send(paginaRecarga('¡Recarga completada!', `Se han sumado <b>${Number(r.amount).toFixed(2)} USD</b> a tu saldo de Marketplace Disruptivo. Ya puedes cerrar esta pestaña y volver a GoHighLevel.`, true))
       }
-      return reply.type('text/html').send(paginaRecarga('Pago en verificación', 'Stripe aún no ha confirmado el pago. En cuanto lo confirme, el saldo se sumará solo (normalmente en menos de un minuto). Puedes cerrar esta pestaña.', false))
+      return reply.type('text/html').send(paginaRecarga('Pago en verificación', 'Tu pago aún no está confirmado. En cuanto se confirme, el saldo se sumará solo (normalmente en menos de un minuto). Puedes cerrar esta pestaña.', false))
     } catch (err) {
       req.log.warn({ err: err.message, id: req.query?.id }, 'vuelta de la recarga con tarjeta')
       return reply.code(err.statusCode && err.statusCode < 500 ? err.statusCode : 502).type('text/html')

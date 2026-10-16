@@ -215,7 +215,7 @@ export default function UserPortal({ me, onLogout, asLocation = null, onPickLoca
                 <h2 className="text-sm font-semibold flex items-center gap-2"><Wallet size={15} className="text-gold" /> Recargar saldo</h2>
                 <p className="text-[11px] text-ink2 mt-1">
                   {cardOn
-                    ? <>Elige el importe y págalo con tarjeta (pago seguro de Stripe). Se suma a tu saldo en cuanto se confirma el pago y con él se pagan tus apps.{walletOn && ' También puedes pasarlo desde tu monedero de GoHighLevel.'}</>
+                    ? <>Elige el importe y págalo con tarjeta (pago seguro y cifrado). Se suma a tu saldo en cuanto se confirma el pago y con él se pagan tus apps.{walletOn && ' También puedes pasarlo desde tu monedero de GoHighLevel.'}</>
                     : 'Se cobra de tu wallet de GoHighLevel y se abona como crédito al instante. El crédito se consume antes que el wallet.'}
                 </p>
               </div>
@@ -241,7 +241,7 @@ export default function UserPortal({ me, onLogout, asLocation = null, onPickLoca
                 {cardOn && (
                   <Button
                     disabled={preview || topupBusy || Boolean(cardWait) || !topupLoc || !topupValid} onClick={doCardTopup}
-                    title={preview ? 'Solo lectura en «Ver como cliente»' : 'Pago seguro con tarjeta (Stripe)'}
+                    title={preview ? 'Solo lectura en «Ver como cliente»' : 'Pago seguro y cifrado con tarjeta'}
                   >
                     <CreditCard size={15} className="inline -mt-0.5 mr-1" />{topupBusy ? 'Abriendo…' : 'Pagar con tarjeta'}
                   </Button>
@@ -260,7 +260,7 @@ export default function UserPortal({ me, onLogout, asLocation = null, onPickLoca
             {cardWait && (
               <div className="text-xs text-ink2 mt-3 flex flex-wrap items-center gap-3">
                 <span className="w-3.5 h-3.5 rounded-full border-2 border-border border-t-gold spin" />
-                Esperando el pago de {fmtUsd(cardWait.amount)} en Stripe… el saldo se sumará solo al confirmarse.
+                Esperando tu pago de {fmtUsd(cardWait.amount)}… el saldo se sumará solo en cuanto se confirme.
                 <a href={cardWait.url} target="_blank" rel="noopener noreferrer" className="text-gold hover:underline">Abrir el pago</a>
                 <button type="button" className="text-mut hover:text-ink" onClick={() => setCardWait(null)}>Dejar de esperar</button>
               </div>
