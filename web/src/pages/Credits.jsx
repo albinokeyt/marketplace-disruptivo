@@ -36,13 +36,24 @@ function GrantModal({ credits, preset, onClose, onSaved }) {
         </Select>
         <Input
           label="Importe (USD)" type="number" step="0.01" value={f.amount} onChange={set('amount')}
-          hint="Positivo para regalar/prepagar saldo. Negativo para retirarlo (nunca baja de 0)."
+          hint="Positivo para regalar saldo. Negativo para retirarlo (nunca baja de 0). Todo lo que se añade a mano cuenta como cortesía, no como dinero real."
         />
         <Input label="Motivo (opcional)" value={f.reason} onChange={set('reason')} placeholder="promo de bienvenida, compensación…" />
         <Button className="w-full" disabled={busy || !f.location_id || !f.amount}>Aplicar</Button>
       </form>
     </Modal>
   )
+}
+
+// Qué es cada movimiento del libro: cortesía (a mano) o dinero real (tarjeta o monedero), consumo, reembolso…
+const tipoMovimiento = (e) => {
+  if (e.card_topup_id) return `Dinero real · recarga con tarjeta #${e.card_topup_id}`
+  if (e.charge_id && e.reason === 'recarga') return 'Dinero real · recarga desde el monedero de GHL'
+  if (e.reason === 'reversion_recarga') return 'Recarga devuelta'
+  if (e.charge_id && e.reason === 'consumo de cobro') return 'Consumo'
+  if (e.charge_id && e.amount > 0 && String(e.reason || '').startsWith('reembolso')) return 'Reembolso de un consumo'
+  if (!e.charge_id) return 'Cortesía · ajuste a mano'
+  return null
 }
 
 function EntriesModal({ row, onClose }) {
@@ -63,6 +74,7 @@ function EntriesModal({ row, onClose }) {
                 <span className={e.amount >= 0 ? 'text-ok font-medium' : 'text-ink2'}>
                   {e.amount >= 0 ? '+' : ''}{fmtUsd(e.amount)}
                 </span>
+                {tipoMovimiento(e) && <div className="text-[11px] text-ink2">{tipoMovimiento(e)}</div>}
                 {e.reason && <div className="text-[11px] text-mut">{e.reason}{e.charge_id ? ` · cargo #${e.charge_id}` : ''}</div>}
               </div>
               <span className="text-[11px] text-mut whitespace-nowrap">{fmtDate(e.created_at)}</span>
@@ -142,8 +154,10 @@ export default function Credits() {
         </div>
       </div>
       <p className="text-sm text-ink2 -mt-3">
-        Saldo interno por subcuenta. Los cobros lo consumen <b>antes</b> de tocar el wallet de GHL: ideal para promos,
-        compensaciones o prepago. Cuando el saldo no cubre un cobro, ese cobro va al wallet como siempre.
+        Saldo interno por subcuenta. Lo forman la <b>cortesía</b> (lo que se añade a mano: promos, regalos,
+        compensaciones) y el <b>dinero real</b> que recarga el cliente (con tarjeta o desde su monedero de GHL). Los cobros
+        lo consumen <b>antes</b> de tocar el wallet de GHL, gastando primero la cortesía. Cuando el saldo no cubre un
+        cobro, ese cobro va al wallet como siempre.
       </p>
 
       {error && <Empty>{error}</Empty>}
@@ -162,8 +176,8 @@ export default function Credits() {
               <tr>
                 <Th>Subcuenta</Th>
                 <Th className="text-right">Saldo</Th>
-                <Th className="text-right">Concedido (neto)</Th>
-                <Th className="text-right">Recargado</Th>
+                <Th className="text-right" title="Lo añadido a mano menos lo retirado a mano. Puede salir negativo si se retiró más de lo regalado, por ejemplo al devolver una recarga con tarjeta.">Ajustes a mano (neto)</Th>
+                <Th className="text-right" title="Dinero real que ha pagado el cliente: recargas con tarjeta y desde el monedero de GHL, menos las recargas devueltas.">Recargado (tarjeta y monedero)</Th>
                 <Th className="text-right">Consumido</Th>
                 <Th className="text-right">Reembolsado</Th>
                 <Th></Th>

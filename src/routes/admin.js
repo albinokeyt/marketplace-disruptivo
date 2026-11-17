@@ -226,8 +226,11 @@ export default async function adminRoutes(app) {
 
   app.patch('/api/admin/apps/:id', guard, async (req, reply) => {
     const id = numOr(req.params.id)
-    const { name, test_mode, status, can_charge } = req.body || {}
+    const { name, test_mode, status, can_charge, can_read_finances } = req.body || {}
     if (status && !['active', 'revoked'].includes(status)) return reply.code(400).send({ error: 'status inválido' })
+    if (can_read_finances !== undefined && typeof can_read_finances !== 'boolean') {
+      return reply.code(400).send({ error: 'can_read_finances debe ser true o false' })
+    }
     // allowed_location_ids: ausente = sin cambios; null = todas; array = solo esas
     let allowedSql = false
     let allowedVal = null
@@ -245,10 +248,13 @@ export default async function adminRoutes(app) {
          test_mode = COALESCE($2, test_mode),
          status = COALESCE($3, status),
          can_charge = COALESCE($7, can_charge),
+         -- permiso para leer las finanzas (cortesía y dinero real) por GET /api/v1/finanzas
+         can_read_finances = COALESCE($8, can_read_finances),
          allowed_location_ids = CASE WHEN $4 THEN $5::jsonb ELSE allowed_location_ids END
        WHERE id=$6 AND system = false RETURNING *`,
       [name ?? null, typeof test_mode === 'boolean' ? test_mode : null, status ?? null, allowedSql, allowedVal, id,
-       typeof can_charge === 'boolean' ? can_charge : null]
+       typeof can_charge === 'boolean' ? can_charge : null,
+       typeof can_read_finances === 'boolean' ? can_read_finances : null]
     )
     if (!row) return reply.code(404).send({ error: 'App no encontrada' })
     return { app: { ...row, key_hash: undefined } }

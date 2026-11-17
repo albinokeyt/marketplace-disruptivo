@@ -7,6 +7,7 @@ import { trySpendCredit, getBalance } from '../lib/credits.js'
 import { getTopupConfig } from '../lib/topup.js'
 import { getGhlConfig } from '../lib/settings.js'
 import { walletEnabled } from '../lib/wallet.js'
+import { leerFinanzas, fechaValida, resolverZona } from '../lib/finanzas.js'
 import * as ghl from '../lib/ghl.js'
 
 // Para que las apps enlacen al portal del cliente dentro de GHL («gestiona tu suscripción», «paga con tu saldo»)
@@ -303,5 +304,40 @@ export default async function publicApiRoutes(app) {
     }
     const access = await checkAccess(req.consumerApp.id, locationId)
     return { ...access, credit: await getBalance(locationId), ...(await portalInfo(locationId)) }
+  })
+
+  // FINANZAS de las subcuentas que esta app puede ver: cuánto del saldo es CORTESÍA (añadido a mano por el
+  // administrador) y cuánto DINERO REAL (tarjeta o monedero de GHL), con la regla «cortesía primero», más lo que
+  // ha consumido esta app de cada bolsa. Solo con permiso expreso del administrador (apps.can_read_finances).
+  // Query opcional: location_id, desde=AAAA-MM-DD, hasta=AAAA-MM-DD, zona=<IANA> (el día de cada movimiento se
+  // cuenta en esa zona; inválida → UTC y zona_valida:false).
+  app.get('/api/v1/finanzas', async (req, reply) => {
+    const consumer = req.consumerApp
+    if (consumer.can_read_finances !== true) {
+      return reply.code(403).send({
+        code: 'FINANCES_NOT_ALLOWED',
+        error: 'Esta app no tiene permiso para leer las finanzas de las subcuentas: lo activa el administrador del marketplace',
+      })
+    }
+    const qs = req.query || {}
+    const texto = (v) => (v === undefined || v === null ? '' : String(v).trim())
+    const locationId = texto(qs.location_id) || null
+    if (locationId && !locationAllowed(consumer, locationId)) {
+      return reply.code(403).send({ code: 'LOCATION_NOT_ALLOWED', error: 'Esta API key no está autorizada para esa subcuenta' })
+    }
+    const desde = texto(qs.desde) || null
+    const hasta = texto(qs.hasta) || null
+    if ((desde && !fechaValida(desde)) || (hasta && !fechaValida(hasta))) {
+      return reply.code(400).send({ code: 'INVALID_DATE', error: 'Las fechas «desde» y «hasta» van en formato AAAA-MM-DD (por ejemplo, 2026-11-01)' })
+    }
+    if (desde && hasta && desde > hasta) {
+      return reply.code(400).send({ code: 'INVALID_RANGE', error: 'La fecha «desde» no puede ser posterior a «hasta»' })
+    }
+    const { zona, zona_valida } = resolverZona(qs.zona)
+    // alcance: la subcuenta pedida, o las que permite la API key (null = todas)
+    const locationIds = locationId
+      ? [locationId]
+      : (Array.isArray(consumer.allowed_location_ids) ? consumer.allowed_location_ids : null)
+    return leerFinanzas({ appId: consumer.id, locationIds, desde, hasta, zona, zonaValida: zona_valida })
   })
 }

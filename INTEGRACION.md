@@ -297,6 +297,78 @@ DELETE /api/v1/charges/:id
 
 Solo cargos de tu propia app y en estado cobrable. Devuelve el dinero al wallet (o el saldo al crédito interno).
 
+### Finanzas de las subcuentas: cortesía y dinero real
+
+El saldo del marketplace de cada subcuenta mezcla dos tipos de dinero:
+
+- **Cortesía**: lo que el administrador añade a mano (promos, regalos, compensaciones). No es dinero real.
+- **Dinero real**: lo que pagó el cliente, recargando con **tarjeta** o desde su **monedero de GoHighLevel**.
+
+Cada consumo se paga **primero con la cortesía** y, cuando se acaba, con el dinero real (regla `cortesia_primero`).
+Este endpoint dice, por subcuenta, cuánto queda de cada tipo y cuánto ha consumido tu app de cada uno.
+
+**Necesita permiso expreso:** el administrador lo activa en el panel (Apps → «Puede leer finanzas»). Sin él,
+`403 { "code": "FINANCES_NOT_ALLOWED" }`. Para saber si el marketplace ya lo ofrece, `GET /healthz` incluye
+`"finanzas"` en `funciones`.
+
+```http
+GET /api/v1/finanzas?location_id=…&desde=2026-11-01&hasta=2026-11-30&zona=Europe/Madrid
+→ 200 {
+  "regla": "cortesia_primero", "moneda": "USD", "zona": "Europe/Madrid", "zona_valida": true,
+  "desde": "2026-11-01", "hasta": "2026-11-30",
+  "locations": [ {
+    "location_id": "abc123", "name": "Clínica Uno",
+    "saldo": { "total": 17, "cortesia": 0, "real": 17, "registrado": 17, "descuadre": false },
+    "historico": { …BLOQUE… },
+    "rango": { …BLOQUE… }
+  } ],
+  "totales": { "saldo": { "total", "cortesia", "real", "registrado" }, "historico": { …BLOQUE… }, "rango": { …BLOQUE… } }
+}
+```
+
+Parámetros (todos opcionales):
+
+| Parámetro | Qué hace |
+|---|---|
+| `location_id` | Solo esa subcuenta. Si tu clave no la tiene permitida: `403 LOCATION_NOT_ALLOWED`. Sin él, todas las que puedes ver |
+| `desde`, `hasta` | Fechas `AAAA-MM-DD` para el bloque `rango`. Solo `desde` = hasta hoy; solo `hasta` = desde el principio. Sin ninguna, `rango` es `null`. Mal escritas: `400 INVALID_DATE`; `desde` posterior a `hasta`: `400 INVALID_RANGE` |
+| `zona` | Zona horaria IANA (`Europe/Madrid`, `America/Bogota`…) para decidir en qué **día** cae cada movimiento. Por defecto `UTC`. Si no es válida (o es un desfase tipo `+01:00`), se usa `UTC` y llega `"zona_valida": false` |
+
+`saldo`: `total` = `cortesia` + `real` según el libro de movimientos; `registrado` es el saldo que el marketplace
+tiene apuntado; `descuadre` es `true` si se diferencian en más de 0,01 USD (avísanos si lo ves).
+
+`historico` resume todo el libro; `rango`, solo los movimientos cuyo día (en `zona`) cae entre `desde` y `hasta`.
+Ojo: el reparto de un consumo del rango (cuánto fue cortesía y cuánto real) depende de todo lo anterior, así que
+siempre se calcula con el historial completo.
+
+**El BLOQUE** (todo en USD, ≥ 0, con 6 decimales como máximo):
+
+| Campo | Qué es |
+|---|---|
+| `cortesia_concedida` | Saldo añadido a mano por el administrador |
+| `cortesia_retirada` | Cortesía retirada a mano por el administrador (solo lo que salió de la cortesía) |
+| `real_tarjeta` | Recargas con tarjeta |
+| `real_monedero` | Recargas desde el monedero de GoHighLevel |
+| `real_revertido` | Recargas devueltas al cliente |
+| `real_retirado` | Dinero real retirado a mano por el administrador, p. ej. al devolver desde Stripe una recarga con tarjeta (lo que una retirada a mano saca cuando ya no queda cortesía) |
+| `real_recargado` | `real_tarjeta` + `real_monedero` − `real_revertido` − `real_retirado` |
+| `consumo_total` | Todo lo consumido del saldo (todas las apps), neto de reembolsos |
+| `consumo_app` | Lo consumido por **tu** app, neto de reembolsos… |
+| `consumo_app_cortesia` | …de ello, pagado con cortesía |
+| `consumo_app_real` | …de ello, pagado con dinero real |
+| `reembolsos_app` | Lo que se devolvió al saldo por reembolsos de cargos de tu app |
+| `consumo_otras_apps` | Lo consumido por las demás apps (y los planes), neto de reembolsos |
+| `otros` | Movimientos del sistema que no encajan en lo anterior (lo normal es 0) |
+| `cobrado_monedero_app` | Cargos de tu app cobrados **directamente del monedero de GoHighLevel** (no pasan por el saldo, pero son dinero real) |
+
+Un reembolso se devuelve a las bolsas en la misma proporción en que se pagó el consumo. Solo aparecen las
+subcuentas con algún movimiento en el saldo o algún cargo de tu app cobrado del monedero.
+
+Los `totales` se calculan con los movimientos, no sumando las filas. Si en el rango entra el reembolso de un
+consumo anterior, el total puede ser menor que la suma de las filas (en la fila esa resta no puede bajar de 0). En
+ese caso, además, `consumo_app_cortesia` + `consumo_app_real` puede no coincidir con `consumo_app`: el dinero real
+consumido se muestra siempre entero.
+
 ### Tarifas y subcuentas disponibles
 
 ```http
@@ -322,7 +394,7 @@ Pídele al administrador que active el modo prueba de tu app mientras integras, 
   en todas las respuestas.
 - **Aislamiento:** con tu API key solo ves tus cargos; `GET /api/v1/charges` filtra por tu app siempre.
 - **Alcance por subcuenta:** el administrador puede limitar tu clave a subcuentas concretas. Fuera de esa lista
-  recibes `403` con `code: "LOCATION_NOT_ALLOWED"` (en `POST /charges`, `/has-funds` y `/access`) y
+  recibes `403` con `code: "LOCATION_NOT_ALLOWED"` (en `POST /charges`, `/has-funds`, `/access` y `/finanzas`) y
   `GET /api/v1/locations` solo lista las permitidas. Por defecto la clave alcanza a **todas** las subcuentas.
 - **Reconciliación automática:** un proceso en segundo plano revisa cada 60 s los cargos `unknown` (>3 min) y los
   `pending` huérfanos (>10 min), pregunta a GHL y los cierra correctamente. Por eso un cobro "sin confirmar"

@@ -331,9 +331,12 @@ export default async function marketplaceRoutes(app) {
        FROM connections k
        LEFT JOIN credits c ON c.location_id = k.location_id
        LEFT JOIN (
+         -- granted = CORTESÍA neta: solo los ajustes a mano del administrador (sin cargo y sin recarga con tarjeta).
+         -- topups  = dinero REAL recargado: con tarjeta (card_topup_id) y desde el monedero de GHL, menos reversiones.
          SELECT location_id,
-                SUM(amount) FILTER (WHERE charge_id IS NULL) AS granted,
-                SUM(amount) FILTER (WHERE charge_id IS NOT NULL AND reason IN ('recarga','reversion_recarga')) AS topups,
+                SUM(amount) FILTER (WHERE charge_id IS NULL AND card_topup_id IS NULL) AS granted,
+                SUM(amount) FILTER (WHERE card_topup_id IS NOT NULL
+                                       OR (charge_id IS NOT NULL AND reason IN ('recarga','reversion_recarga'))) AS topups,
                 -SUM(amount) FILTER (WHERE charge_id IS NOT NULL AND reason = 'consumo de cobro') AS spent,
                 SUM(amount) FILTER (WHERE amount > 0 AND charge_id IS NOT NULL AND reason LIKE 'reembolso%') AS refunded
          FROM credit_entries GROUP BY location_id
@@ -376,7 +379,7 @@ export default async function marketplaceRoutes(app) {
 
   app.get('/api/admin/credits/:locationId/entries', guard, async (req) => {
     const { rows } = await q(
-      `SELECT amount, reason, charge_id, created_at FROM credit_entries
+      `SELECT amount, reason, charge_id, card_topup_id, created_at FROM credit_entries
        WHERE location_id=$1 ORDER BY created_at DESC LIMIT 100`, [req.params.locationId])
     return { entries: rows.map((r) => ({ ...r, amount: numOr(r.amount, 0) })) }
   })

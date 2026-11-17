@@ -343,6 +343,7 @@ export default function Apps() {
                 <Th className="text-right">Cobros</Th>
                 <Th className="text-right">Facturado</Th>
                 <Th>Puede cobrar</Th>
+                <Th title="Puede leer finanzas (cortesía y dinero real) de las subcuentas que tiene permitidas">Puede leer finanzas</Th>
                 <Th>Modo prueba</Th>
                 <Th>Estado</Th>
                 <Th></Th>
@@ -361,6 +362,16 @@ export default function Apps() {
                   <Td>
                     <Toggle checked={a.can_charge !== false} onChange={(v) => patch(a, { can_charge: v })} />
                     {a.can_charge === false && <div className="text-[11px] text-bad mt-1">cobros cortados</div>}
+                  </Td>
+                  <Td>
+                    <Toggle
+                      checked={a.can_read_finances === true}
+                      onChange={(v) => {
+                        if (v && !confirm(`¿Dejar que «${a.name}» lea las finanzas de sus subcuentas? Verá cuánto saldo es cortesía y cuánto dinero real, y lo que ha consumido cada app.`)) return
+                        patch(a, { can_read_finances: v })
+                      }}
+                    />
+                    <div className="text-[11px] text-mut mt-1">cortesía y dinero real</div>
                   </Td>
                   <Td><Toggle checked={a.test_mode} onChange={(v) => patch(a, { test_mode: v })} /></Td>
                   <Td><Badge status={a.status} /></Td>
